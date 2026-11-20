@@ -39,6 +39,16 @@ NAMES = {
     0x8002ADC0: "osWritebackDCacheAll",   # cache 0x01 over 0x80000000-0x80002000
     0x8002B6F0: "__osExceptionPreamble",  # lui/addiu k0; jr k0 to 0x8002B700
     0x8002B700: "__osException",
+    # osGetTime/osSetTimer wait, then __osPackRequestData, __osSiRawStartDma
+    # and __osContGetInitData: the shape of osContInit (just before
+    # __osContGetInitData); unnamed, it called helpers the runtime skips
+    0x8002ADF0: "osContInit",
+    # lw from 0xA4500004 (AI_LEN): osAiGetLength; too short for a signature
+    0x80026FF0: "osAiGetLength",
+    # SI_STATUS (0xA4800018) busy bits: a call-target name had it as
+    # __osSpDeviceBusy, which is the one at 0x80034100 (SP_STATUS 0xA4040010)
+    0x8002DC70: "__osSiDeviceBusy",
+    0x80034100: "__osSpDeviceBusy",
 }
 
 SMALL_OK = {"osAiGetStatus", "osSpTaskYield", "__osGetCause", "__osSetSR", "osScGetCmdQ",
@@ -58,8 +68,21 @@ def branch_target(w, v):
         return (v & 0xF0000000) | ((w & 0x3FFFFFF) << 2), False
     return None, None
 
+def is_branch_or_jump(w):
+    op = w >> 26
+    if w == 0:
+        return False
+    if op in (2, 3, 4, 5, 6, 7, 20, 21, 22, 23) or op == 1:   # j jal b* (+likely), regimm
+        return True
+    if op == 0 and (w & 0x3F) in (8, 9):                     # jr jalr
+        return True
+    return op == 0x11 and ((w >> 21) & 0x1F) == 8            # bc1*
+
 def merge_crossing(starts, rng, word_at, protected, soft=frozenset()):
     absorbed = set()
+    # Nothing starts in a delay slot: the instruction before it is the
+    # branch or jump it belongs to.
+    starts = [x for x in starts if not (rng(x - 4) and is_branch_or_jump(word_at(x - 4))) or x in protected]
     starts = sorted(starts)
     changed = True
     while changed:
@@ -108,6 +131,12 @@ def main():
         # inside matched functions (size 0 here: osInvalDCache, bzero, ...).
         if 0 < s < 0x24 and n not in SMALL_OK:
             continue
+        # The game links the plain audio library (al*, matched directly);
+        # n_al* names only come from call targets inside other signatures,
+        # and landed on game code (0x80032D28 is a busy-wait, not
+        # n_alLoadParam).
+        if s == 0 and n.startswith("n_al"):
+            continue
         names.setdefault(v, []).append((n, s))
 
     def word(r): return int.from_bytes(rom[r:r+4], 'big')
@@ -146,8 +175,8 @@ def main():
                 if (w >> 16) == 0x27BD and (w & 0x8000):
                     p = r - 4
                     while p > cs and word(p) == 0: p -= 4
-                    # jr ra + delay slot (a nop delay slot is skipped above, landing on the jr)
-                    if word(p - 4) == 0x03E00008 or word(p) == 0x03E00008:
+                    # jr ra or j + delay slot (a nop delay slot is skipped above, landing on the jump)
+                    if word(p - 4) == 0x03E00008 or word(p) == 0x03E00008 or (word(p - 4) >> 26) == 2 or (word(p) >> 26) == 2:
                         starts.add(vs + r - rs)
         if seg == "boot":
             for v in names:
@@ -191,6 +220,29 @@ def main():
                                 if vs + cs - rs <= t < vs + ce - rs:
                                     starts.add(t)
                                     jal_targets.add(t)
+        # Pointers in data (vtables, callback tables) to a plausible function
+        # start in this segment's code: from this segment's own data, and for
+        # boot from every segment's. A run of 3+ consecutive code pointers is
+        # a switch jump table, whose targets are inside a function: skipped.
+        def code_ptr(x):
+            return any(vs + a - rs <= x < vs + b - rs for a, b in code)
+        sources = [(rs, re_, code)] if seg != "boot" else [(o[2], o[3], o[5]) for o in SEGMENTS]
+        for drs, dre, dcode in sources:
+            r = drs
+            while r < dre:
+                if any(a <= r < b for a, b in dcode):
+                    r += 4
+                    continue
+                run = r
+                while run < dre and code_ptr(word(run)) and not any(a <= run < b for a, b in dcode):
+                    run += 4
+                n = (run - r) // 4
+                if 1 <= n <= 2:
+                    for q in range(r, run, 4):
+                        t = word(q)
+                        if plausible(rs + t - vs):
+                            starts.add(t)
+                r = run + 4 if n else r + 4
         if seg != "boot":
             for a, b in SEGMENTS[0][5]:
                 for r in range(a, b, 4):
@@ -240,7 +292,7 @@ def main():
             while e - 4 > s and word(rs + (e - 4 - vs)) == 0 and word(rs + (e - 8 - vs)) != 0x03E00008 and (word(rs + (e - 8 - vs)) >> 26) not in (2,) and word(rs + (e - 8 - vs)) == 0:
                 e -= 4
             name = NAMES.get(s, f"func_{s:08X}")
-            if seg == "boot" and s in names:
+            if seg == "boot" and s in names and s not in NAMES:
                 cand = [n for n, sz in names[s] if n not in used and not n.startswith('_') or n in ('__osDisableInt','__osRestoreInt')]
                 cand = [n for n, sz in names[s] if n not in used]
                 good = [n for n in cand if '_text_' not in n and '_rodata_' not in n and '_data_' not in n]

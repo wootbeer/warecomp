@@ -12,6 +12,18 @@ symbols_file_path = "WASyms/wa.us.syms.toml"
 
 [patches]
 
+# The boot stub calls main (func_800030B0) and then hits `break`. On the N64
+# main never returns: starting the idle thread takes the CPU from the boot
+# code for good. In this runtime osStartThread from the boot thread returns,
+# so main returns into the `break`, which ends the program ("Encountered
+# break at original vram 0x80000438"). A `jr $ra` there (the next word is
+# already a nop for its delay slot) lets the boot thread just end, as it
+# does in games whose stub loops instead (STATUS.md round 1).
+[[patches.instruction]]
+func = "recomp_entrypoint"
+vram = 0x80000438
+value = 0x03E00008
+
 # The launcher/menu UI's per-frame callback pump (recompui's
 # recomp_run_ui_callbacks), once per presented frame: in libultra's scheduler
 # (func_80033948, the task-complete handler), right after its
@@ -24,4 +36,64 @@ func = "func_80033948"
 before_vram = 0x800339C4
 text = """
     recomp_run_ui_callbacks(rdram, ctx);
+"""
+
+# Busy-waits. Two small routines spin on memory another thread changes, with
+# no OS call in the loop: on the N64 the retrace interrupt preempted them, but
+# this runtime only switches threads at OS calls, so the spinning thread
+# starved the one that would end the wait (the main thread sat in
+# func_80032D0C from the start: STATUS.md round 1). Each loop calls
+# wa_yield_via_priority_drop (src/main/scheduler_workaround.cpp, btgarecomp's
+# fix for the same thing), which delivers pending events and lets another
+# thread run.
+#
+# func_80032D0C: wait for the next frame (spins until the retrace counter at
+# 0x80048768 changes). Loop: lw at 0x80032D14, beq back to it.
+[[patches.hook]]
+func = "func_80032D0C"
+before_vram = 0x80032D14
+text = """
+    wa_yield_via_priority_drop(rdram);
+"""
+
+# func_80032C78: starting a display list, spins while the current frame
+# buffer's busy flag (the byte at 0x80048764 + the buffer index at
+# 0x80048760) is set, i.e. until that buffer's graphics task is done (the
+# scheduler client, func_800328AC, clears it). Loop: lw at 0x80032C98, bnez
+# back to it.
+[[patches.hook]]
+func = "func_80032C78"
+before_vram = 0x80032C98
+text = """
+    wa_yield_via_priority_drop(rdram);
+"""
+
+# func_80032D28: spins while either flag byte at 0x80048764/0x80048765 is set.
+# Both loops start at its first instruction (0x80032D28: lui; the second
+# loop's branch goes to 0x80032D28 too).
+[[patches.hook]]
+func = "func_80032D28"
+before_vram = 0x80032D28
+text = """
+    wa_yield_via_priority_drop(rdram);
+"""
+
+# The code overlays (src/game/overlays.cpp): right after the main thread's
+# loop DMAs one to 0x80048FE0 (func_8002FEB0 returns once it's in), tell the
+# runtime which one is there, before the loop calls into it.
+# Frontend: DMA call at 0x800043E8 (ROM 0x38D40, 0x46370 bytes).
+[[patches.hook]]
+func = "func_8000405C"
+before_vram = 0x800043F0
+text = """
+    wa_load_overlay(0x38D40, 0x46370);
+"""
+
+# The match: DMA call at 0x8000450C (ROM 0x7F0B0, 0x67FE0 bytes of code and
+# data; the DMA's 0x69110 includes its BSS).
+[[patches.hook]]
+func = "func_8000405C"
+before_vram = 0x80004514
+text = """
+    wa_load_overlay(0x7F0B0, 0x67FE0);
 """

@@ -84,3 +84,6 @@ build-release-linux/
 # Local build logs
 /build-configure.log
 /build.log
+
+# Crash reports from local runs (src/main/crash_handler.cpp)
+crash_log.txt

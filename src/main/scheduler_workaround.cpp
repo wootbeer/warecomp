@@ -80,6 +80,16 @@ void dequeue_external_messages(uint8_t* rdram);
 // times in a normal pass (round 53), and a flag the hand-off clears is seen
 // at once.
 //
+// The priority the spinning thread drops to for the hand-off. btgarecomp drops
+// to 0; here that deadlocks (STATUS.md round 1): Worms Armageddon's idle
+// thread runs at 0 too (it calls osSetThreadPri(0, 0) and loops), and the
+// runtime only switches to a strictly higher priority, so once the idle
+// thread had the CPU the dropped thread never got it back to restore its
+// priority. 1 is still below every other game thread.
+namespace {
+    constexpr int32_t kHandOffPriority = 1;
+}
+
 extern "C" void wa_yield_via_priority_drop(uint8_t* rdram) {
     // Calls less than 1 ms apart are one wait; once a wait has gone on for
     // 2 ms, each further call first sleeps until the next external message.
@@ -95,7 +105,7 @@ extern "C" void wa_yield_via_priority_drop(uint8_t* rdram) {
     dequeue_external_messages(rdram);
 
     int32_t saved_pri = osGetThreadPri(rdram, 0);
-    osSetThreadPri(rdram, 0, 0);
+    osSetThreadPri(rdram, 0, kHandOffPriority);
     osSetThreadPri(rdram, 0, saved_pri);
     last_call = std::chrono::steady_clock::now();
 }

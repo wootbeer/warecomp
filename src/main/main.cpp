@@ -72,6 +72,9 @@ extern "C" void recomp_entrypoint(uint8_t* rdram, recomp_context* ctx);
 // function at 0x..." -- see that file's own comment for the full story.
 void register_wa_overlays();
 
+// src/game/overlays.cpp
+void wa_clear_initial_overlays(uint8_t* rdram, recomp_context* ctx);
+
 namespace wa {
     void apply_theme(); // theme.cpp
 }
@@ -415,6 +418,9 @@ std::vector<recomp::GameEntry> supported_games = {
         // offset (btgarecomp's first boot crash).
         .entrypoint_address = (gpr)(int32_t)0x80000400u,
         .entrypoint = recomp_entrypoint,
+        // The runtime's startup registers both code overlays at the wrong
+        // addresses (src/game/overlays.cpp).
+        .on_init_callback = wa_clear_initial_overlays,
     },
 };
 

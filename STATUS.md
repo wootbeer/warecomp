@@ -3,6 +3,71 @@
 How each piece of the port was found and fixed, newest first. PROGRESS.md
 has the short version.
 
+## 2026-11-20, round 2: first runs (Linux, software Vulkan)
+
+Run headless on this machine (no GPU): Xvfb and Mesa's llvmpipe Vulkan
+driver, `--game wa` to skip the launcher, the ROM in
+`~/.config/warecomp/wa.n64.us.z64`, and gdb for thread states. The launcher
+draws correctly (checked with a screenshot). In game, each run got further:
+
+1. **Exited at once**: "Encountered break at original vram 0x80000438". The
+   boot stub calls main and then has a `break`. In this runtime osStartThread
+   from the boot thread returns (on the N64 it never does), so main returned
+   into the `break`, and the runtime exits on one. Fixed with an instruction
+   patch: `jr $ra` there, so the boot thread just ends.
+2. **Link errors** for `__osSiRawStartDma_recomp` and two more: the function
+   calling them, 0x8002ADF0, is `osContInit` (timer wait, then the SI
+   requests; just before `__osContGetInitData`). Named by hand.
+3. **Main thread spinning** in `func_80032D0C` ("wait for the next frame":
+   spins until the retrace counter at 0x80048768 changes). Busy-waits with no
+   OS call never give way in this runtime. Hooked to
+   `wa_yield_via_priority_drop` (btgarecomp's fix), and the same for
+   `func_80032D28` (spins on two flag bytes). 0x80032D28 had been named
+   `n_alLoadParam` from a call-target name in another signature; `n_al*`
+   names are dropped now (the game uses the plain `al*` library).
+4. **Deadlock in the yield**: entered once, never returned. It drops the
+   thread to priority 0 for the hand-off; this game's idle thread is at 0
+   too (`osSetThreadPri(0, 0)`, then a `j .` loop), and the runtime only
+   switches to a strictly higher priority, so the dropped thread never got
+   the CPU back. It drops to 1 here (`kHandOffPriority`).
+5. **Crash reading 0xA4500004** (AI length register) in 0x80026FF0:
+   `osAiGetLength`, too short for a signature. Named by hand, and a check of
+   every unnamed boot function that reads a hardware register found one
+   more: 0x80034100 reads SP_STATUS, `__osSpDeviceBusy`; the function that
+   had that name, 0x8002DC70, reads SI_STATUS and is `__osSiDeviceBusy`.
+   Hand names now take priority over signature names.
+6. **"Failed to find function at 0x80057440"**, a virtual call into the
+   frontend overlay. The function was in the symbol file; the runtime didn't
+   know the overlay was loaded. This runtime doesn't register overlays on a
+   DMA, and its startup registers every code section in the ROM's first MB
+   at a straight-copy address: both overlays, wrongly (frontend at
+   0x80038140, the match at 0x8007E4B0). `src/game/overlays.cpp`: the game
+   entry's `on_init_callback` removes those, and hooks right after the
+   loader's two DMAs (0x800043F0, 0x80004514) register the overlay just
+   loaded in place of the other.
+7. **"Failed to find function at 0x800048B0"**, a boot function reached only
+   through a pointer, after the idle thread's `j .`. Two general rules in
+   `tools/make_syms.py`: a stack prologue after any `j`/`jr` + delay slot
+   starts a function, and pointers in data (vtables, callback tables) to a
+   plausible function start are function starts (runs of 3+ code pointers
+   are switch tables and are skipped).
+8. **Main thread spinning** in `func_80032C78` (starting a display list:
+   waits for the frame buffer's busy flag). Same hook.
+
+Also found while building: the game overlay's code had been disassembled at
+VRAM 0x8004D850 instead of 0x8004D860 (a hand-typed number), so all its
+spimdisasm labels were 0x10 off; `tools/regen_syms.sh` now computes each
+range's VRAM from the segment table. And no function may start in a delay
+slot (one did, leaving a `goto` to a label that was never emitted). 2717
+functions now.
+
+**Where it is now**: no crash or hang in two minutes. In 45 seconds the game
+started 2647 RSP tasks and its threads cycle normally, but swapped buffers
+only twice and the screen stays black. llvmpipe renders on the CPU, so this
+may just be very slow frames; the next step is a run on a real GPU
+(Windows, the owner's PC), and if it's still black, find what the frontend
+is waiting for.
+
 ## 2026-11-20, round 1: the ROM's layout, the symbol file, the first build
 
 Started from the owner's dump, `Worms Armageddon (USA) (En,Fr,Es).n64`
@@ -104,8 +169,8 @@ functions in each code range, plus:
 Overlay functions are named `front_XXXXXXXX` and `game_XXXXXXXX` (the two
 overlays share addresses). `tools/regen_syms.sh` reruns the whole thing.
 
-Result: N64Recomp recompiles all 3561 functions with no errors and no
-warnings. Its only notes are three calls from boot into the overlay range
+Result: N64Recomp recompiles all functions with no errors and no
+warnings (3561 in this round; 2717 after round 2's corrections). Its only notes are three calls from boot into the overlay range
 (the loader), which can't be resolved statically because both overlays
 have a function there; they go through the runtime lookup, which is right
 for overlays. The runtime loads overlays itself on each ROM DMA.
@@ -135,14 +200,4 @@ Generation (Graphics), plus the frontend's own tabs.
 - Submodules pinned to btgarecomp's commits, so its library patches apply
   unchanged (they do).
 
-Built on Linux (Ubuntu 24.04, clang 18). Not run yet: this machine has no
-GPU, and the game needs testing on the owner's PC.
-
-### Next
-
-- First run on Windows: does the main thread get through the frontend
-  overlay to the title screen? Likely trouble spots, from btgarecomp's
-  history: busy-wait loops that need `wa_yield_via_priority_drop`
-  (src/main/scheduler_workaround.cpp), divisions by zero that the N64
-  tolerated, and the clock rate.
-- Confirm the EEPROM size when the game first saves.
+Built on Linux (Ubuntu 24.04, clang 18). First runs: round 2.
