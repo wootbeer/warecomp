@@ -1,0 +1,22 @@
+# Worms Armageddon's RSP audio microcode (n_aspMain), recompiled by
+# N64Recomp's RSPRecomp. See STATUS.md round 1.
+#
+# Located from the game's audio thread (0x80022620), which hands the audio
+# task ucode text 0x80015B70 and data 0x800352C0. Both live in the resident
+# segment: ROM offset = vram - 0x7FFFF400. The text is 0xC60 bytes and the
+# data's command dispatch table matches BattleTanx: Global Assault's
+# n_aspMain value for value (btgarecomp's n_aspMain.us.rev0.toml), so this is
+# the same microcode build.
+text_offset = 0x16770
+text_size = 0xC60
+text_address = 0x04001080
+rom_file_path = "Worms Armageddon (USA).z64"
+output_file_path = "rsp/n_aspMain.cpp"
+output_function_name = "n_aspMain"
+extra_indirect_branch_targets = [
+    # command dispatch table, the first 16 halfwords of the ucode data
+    # (0x800352C0); two slots are 0 (unused commands). Command 0x0E's entry
+    # 0x02B0 is IMEM 0x12B0 (the RSP PC is 12 bits), as in btgarecomp.
+    0x10EC, 0x139C, 0x119C, 0x1A64, 0x11C8, 0x17EC, 0x1208, 0x127C, 0x1348, 0x1248, 0x1C84, 0x12D4, 0x1384,
+    0x12B0
+]

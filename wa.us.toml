@@ -1,0 +1,27 @@
+# N64Recomp config for Worms Armageddon (USA) (En,Fr,Es).
+# The ROM has a resident segment and two overlays that load at the same
+# address (frontend menus, then the match); see STATUS.md round 1 and
+# WASyms/wa.us.syms.toml.
+
+[input]
+entrypoint = 0x80000400
+output_func_path = "RecompiledFuncs"
+rom_file_path = "Worms Armageddon (USA).z64"
+symbols_file_path = "WASyms/wa.us.syms.toml"
+
+
+[patches]
+
+# The launcher/menu UI's per-frame callback pump (recompui's
+# recomp_run_ui_callbacks), once per presented frame: in libultra's scheduler
+# (func_80033948, the task-complete handler), right after its
+# osViSwapBuffer call returns. The callee-saved registers the game still
+# needs are untouched there, and the caller-saved ones the pump uses were
+# already clobbered by the call (btgarecomp replaced its game's own swap
+# routine with a patch instead; STATUS.md round 1).
+[[patches.hook]]
+func = "func_80033948"
+before_vram = 0x800339C4
+text = """
+    recomp_run_ui_callbacks(rdram, ctx);
+"""
