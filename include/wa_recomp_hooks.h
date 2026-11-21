@@ -7,6 +7,7 @@
 // recomp.h, so it includes it itself (it has an include guard).
 
 #include <stdint.h>
+#include <stdbool.h>
 #include "recomp.h"
 
 // Widescreen (src/game/widescreen.cpp): how far past each side of the 320
@@ -24,6 +25,7 @@ void recomp_run_ui_callbacks(uint8_t* rdram, recomp_context* ctx);
 
 // src/main/scheduler_workaround.cpp: called from the game's busy-wait loops
 // so the thread that ends the wait gets to run.
+bool wa_audio_fifo_full(void);
 void wa_yield_via_priority_drop(uint8_t* rdram);
 
 // src/game/overlays.cpp: registers the code overlay just DMA'd to 0x80048FE0

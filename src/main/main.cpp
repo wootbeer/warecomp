@@ -353,6 +353,25 @@ static size_t get_frames_remaining() {
     return queued_frames > headroom_frames ? queued_frames - headroom_frames : 0;
 }
 
+// The game paces its audio with the AI's "FIFO full" status: its audio thread
+// wakes once a frame and makes a buffer (552 frames at 22050 Hz, about 25 ms)
+// only when the AI can take one, which holds it to the playback rate. The
+// runtime's osAiGetStatus never reports full (the DMAs "finish instantly"), so
+// the game made a buffer every frame, 1.5 times real time, and the surplus was
+// dropped at the latency cap: a click each time (STATUS.md round 14). A hook in
+// the audio thread (wa.us.toml) reports full while this much is queued, as a
+// real AI does with a buffer playing and the next one waiting.
+static constexpr uint32_t audio_fifo_full_ms = 60;
+
+extern "C" bool wa_audio_fifo_full() {
+    if (audio_device == 0) {
+        return false;
+    }
+    std::lock_guard<std::mutex> lock(audio_mutex);
+    const size_t queued_frames = SDL_GetQueuedAudioSize(audio_device) / (audio_channels * sizeof(float));
+    return queued_frames >= size_t(game_frequency) * audio_fifo_full_ms / 1000;
+}
+
 static void set_frequency(uint32_t frequency) {
     if (frequency != game_frequency) {
         open_audio_device(frequency);

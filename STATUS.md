@@ -3,6 +3,29 @@
 How each piece of the port was found and fixed, newest first. PROGRESS.md
 has the short version.
 
+## 2026-11-21, round 14: audio crackling
+
+The owner heard crackling every so often. Logging what reaches
+`queue_samples` (SDL's dummy driver, which plays at the device rate): the
+game queued 552 stereo frames 60 times a second at 22050 Hz, 1.5 times real
+time, so the queue sat at the 200 ms latency cap and about 20 of every 60
+buffers were dropped there, each one a jump in the waveform. No sample in
+the game's output was at full scale, so it wasn't clipping.
+
+The audio thread (`func_80022620`) wakes once a frame, and before making a
+buffer it calls `osAiGetStatus`: with the AI FIFO full (bit 31) it skips the
+round. On the N64 that paces it to the playback rate (552 frames is about
+22050 / 40). The runtime's `osAiGetStatus` never reports full, so it made a
+buffer every frame. (Its size comes from `func_80022820`, which adjusts it by
+184 frames either way from how much `osAiGetLength` says is left.)
+
+A hook after the `osAiGetStatus` call (0x800226A4, before `$v0` is copied to
+`$s0` in the next delay slot) reports full while 60 ms or more is queued
+(`wa_audio_fifo_full`, src/main/main.cpp). Measured again: 43 buffers a
+second, of 552 and 368 frames (the game's own adjustment at work), the queue
+steady at 45-53 ms before each, nothing dropped. Latency also went from
+about 200 ms to about 60 ms.
+
 ## 2026-11-21, round 13: name tags lost their bottom border (0029 reworked)
 
 Round 12's clamp took the bottom row off every small background: the name

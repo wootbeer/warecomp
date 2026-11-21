@@ -42,6 +42,20 @@ value = 0x10000005
 # needs are untouched there, and the caller-saved ones the pump uses were
 # already clobbered by the call (btgarecomp replaced its game's own swap
 # routine with a patch instead; STATUS.md round 1).
+# Audio pacing (STATUS.md round 14): the audio thread (func_80022620) skips a
+# round while osAiGetStatus reports the AI FIFO full (bit 31, checked by the
+# bltz on $s0 after the call). The runtime never reports full, so report it
+# while enough audio is queued; $v0 is copied to $s0 in the delay slot of the
+# next jal, at 0x800226A8.
+[[patches.hook]]
+func = "func_80022620"
+before_vram = 0x800226A4
+text = """
+    if (wa_audio_fifo_full()) {
+        ctx->r2 = (int32_t)0x80000000;
+    }
+"""
+
 [[patches.hook]]
 func = "func_80033948"
 before_vram = 0x800339C4
