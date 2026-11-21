@@ -22,6 +22,17 @@ SEGMENTS = [
     ("boot",  ".boot",  0x001000, 0x038D40, 0x80000400, [(0x1000, 0x1040), (0x3CB0, 0x16770), (0x18D60, 0x34FC8)]),
     ("front", ".front", 0x038D40, 0x07F0B0, 0x80048FE0, [(0x3E790, 0x7EABC)]),
     ("game",  ".game",  0x07F0B0, 0x0E7090, 0x80048FE0, [(0x83930, 0xE6C08)]),
+    # Seven modules the frontend loads one at a time to 0x800B20F0, just past
+    # the match overlay and its BSS (loader at 0x8004F574; STATUS.md round 4).
+    # Each is a "ptab" header and data, then a block of ~216 leaf functions
+    # (lui/jr/addiu getters returning the address of an item in the data).
+    ("mod0", ".mod0", 0x0E81C0, 0x0F2500, 0x800B20F0, [(0x0E81C0 + 0x8C10, 0x0E81C0 + 0x9638)]),
+    ("mod1", ".mod1", 0x0F2500, 0x0FD9D0, 0x800B20F0, [(0x0F2500 + 0x9D70, 0x0F2500 + 0xA7A4)]),
+    ("mod2", ".mod2", 0x0FD9D0, 0x108700, 0x800B20F0, [(0x0FD9D0 + 0x95F0, 0x0FD9D0 + 0xA024)]),
+    ("mod3", ".mod3", 0x108700, 0x113990, 0x800B20F0, [(0x108700 + 0x9AF0, 0x108700 + 0xA524)]),
+    ("mod4", ".mod4", 0x113990, 0x11E560, 0x800B20F0, [(0x113990 + 0x9430, 0x113990 + 0x9E7C)]),
+    ("mod5", ".mod5", 0x11E560, 0x129760, 0x800B20F0, [(0x11E560 + 0x9A60, 0x11E560 + 0xA4AC)]),
+    ("mod6", ".mod6", 0x129760, 0x135070, 0x800B20F0, [(0x129760 + 0xA180, 0x129760 + 0xABB4)]),
 ]
 
 # Hand corrections (vram -> True adds a function start, False removes one).
@@ -183,6 +194,11 @@ def main():
                     # jr ra or j + delay slot (a nop delay slot is skipped above, landing on the jump)
                     if word(p - 4) == 0x03E00008 or word(p) == 0x03E00008 or (word(p - 4) >> 26) == 2 or (word(p) >> 26) == 2:
                         starts.add(vs + r - rs)
+        if seg.startswith("mod"):
+            for cs, ce in code:
+                for r in range(cs, ce, 4):
+                    if word(r) == 0x03E00008 and r + 8 < ce:
+                        starts.add(vs + r + 8 - rs)
         if seg == "boot":
             for v in names:
                 starts.add(v)

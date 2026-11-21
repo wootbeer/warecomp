@@ -3,6 +3,40 @@
 How each piece of the port was found and fixed, newest first. PROGRESS.md
 has the short version.
 
+## 2026-11-21, round 4: past the language screen, the main menu
+
+The owner's run crashed on confirming the language: "Failed to find
+function at 0x800BAD30" (the Windows crash log shows the exit that
+follows). Nothing was mapped there: it is in one of seven more code blocks.
+The frontend's `front_8004F574` picks one by index and DMAs it to
+0x800B20F0, right after the match overlay's BSS:
+
+| ROM | Size | Code (offset in the module) |
+|---|---|---|
+| 0x0E81C0 | 0xA340 | 0x8C10-0x9638 |
+| 0x0F2500 | 0xB4D0 | 0x9D70-0xA7A4 |
+| 0x0FD9D0 | 0xAD30 | 0x95F0-0xA024 |
+| 0x108700 | 0xB290 | 0x9AF0-0xA524 |
+| 0x113990 | 0xABD0 | 0x9430-0x9E7C |
+| 0x11E560 | 0xB200 | 0x9A60-0xA4AC |
+| 0x129760 | 0xB910 | 0xA180-0xABB4 |
+
+Back to back in ROM (the last ends at 0x135070). Each starts with the
+`ptab` marker, then data, then ~216 leaf functions: `lui`/`jr $ra`/`addiu`
+getters returning the address of an item in the module's data, plus one
+indexed lookup. No calls or branches, so a function starts after every
+`jr $ra` and its delay slot. Probably the menus' text and other data in
+each language or for each screen; named `.mod0`-`.mod6` until that's known.
+Found from the crash's pointer (a vtable at ROM 0xF0DA4) and then the
+loader's table of cartridge addresses.
+
+They are sections in the symbol file now (4232 functions), and a hook after
+the loader's DMA (`wa_load_module`, src/game/overlays.cpp) registers the one
+loaded. The runtime's first-megabyte registration had also put the first two
+at wrong addresses, so the startup cleanup now covers the whole megabyte past
+the resident segment. With that, confirming the language reaches the main
+menu.
+
 ## 2026-11-21, round 3: the language screen draws
 
 The owner's Windows run (real GPU) was black too, so it wasn't llvmpipe.

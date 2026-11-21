@@ -14,6 +14,11 @@
 // wa_clear_initial_overlays (the game entry's on_init_callback) removes those,
 // and wa_load_overlay, hooked right after each of the loader's two DMAs
 // (wa.us.toml), registers the overlay just loaded in place of the other.
+//
+// The frontend also loads one of seven small modules (data and getter
+// functions) to 0x800B20F0, just past the match overlay's BSS (its loader is
+// front_8004F574; STATUS.md round 4). wa_load_module, hooked after that DMA,
+// does the same for them. The first two are in the first megabyte too.
 #include <cstdint>
 
 #include "librecomp/overlays.hpp"
@@ -25,12 +30,16 @@ namespace {
     // DMAs 0x69110 with its BSS).
     constexpr uint32_t kOverlaySpan = 0x69110;
 
+    constexpr int32_t kModuleRam = (int32_t)0x800B20F0;
+    // The largest module (ROM 0x129760).
+    constexpr uint32_t kModuleSpan = 0xB910;
+
     // Where init()'s first-megabyte load registered them: ROM 0x1000 at
-    // 0x80000400, so the frontend (ROM 0x38D40) at 0x80038140 and the match
-    // right after it, ending at 0x800E6490. The resident segment ends at
-    // 0x80038140 and isn't touched.
+    // 0x80000400, so the frontend (ROM 0x38D40) at 0x80038140, then the
+    // match, then the first two modules, all within the megabyte (up to
+    // 0x80100400). The resident segment ends at 0x80038140 and isn't touched.
     constexpr int32_t kInitialStart = (int32_t)0x80038140;
-    constexpr uint32_t kInitialSpan = 0x800E6490u - 0x80038140u;
+    constexpr uint32_t kInitialSpan = 0x80100400u - 0x80038140u;
 }
 
 void wa_clear_initial_overlays(uint8_t*, recomp_context*) {
@@ -40,4 +49,10 @@ void wa_clear_initial_overlays(uint8_t*, recomp_context*) {
 extern "C" void wa_load_overlay(uint32_t rom, uint32_t size) {
     unload_overlays(kOverlayRam, kOverlaySpan);
     load_overlays(rom, kOverlayRam, size);
+}
+
+// rom_k1 is the cartridge address the loader DMAs from (0xB0000000 + offset).
+extern "C" void wa_load_module(uint32_t rom_k1, uint32_t size) {
+    unload_overlays(kModuleRam, kModuleSpan);
+    load_overlays(rom_k1 - 0xB0000000u, kModuleRam, size);
 }

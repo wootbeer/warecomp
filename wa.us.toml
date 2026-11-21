@@ -97,3 +97,13 @@ before_vram = 0x80004514
 text = """
     wa_load_overlay(0x7F0B0, 0x67FE0);
 """
+
+# The frontend's modules (src/game/overlays.cpp): front_8004F574 picks one of
+# seven by index ($s3 = its cartridge address, $s1 = its size) and DMAs it to
+# 0x800B20F0 (call at 0x8004F774); register it right after.
+[[patches.hook]]
+func = "front_8004F574"
+before_vram = 0x8004F77C
+text = """
+    wa_load_module((uint32_t)ctx->r19, (uint32_t)ctx->r17);
+"""

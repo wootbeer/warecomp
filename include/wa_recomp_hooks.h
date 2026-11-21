@@ -24,6 +24,9 @@ void wa_yield_via_priority_drop(uint8_t* rdram);
 // src/game/overlays.cpp: registers the code overlay just DMA'd to 0x80048FE0
 // (ROM offset and size) with the runtime, in place of the other one.
 void wa_load_overlay(uint32_t rom, uint32_t size);
+// The same for the frontend's modules at 0x800B20F0 (cartridge address
+// 0xB0000000 + ROM offset, and size).
+void wa_load_module(uint32_t rom_k1, uint32_t size);
 
 #ifdef __cplusplus
 }
