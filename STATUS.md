@@ -3,6 +3,28 @@
 How each piece of the port was found and fixed, newest first. PROGRESS.md
 has the short version.
 
+## 2026-11-21, round 12: a line of wrong pixels along the bottom edge
+
+The owner saw, sometimes, a line of stray pixels along the bottom of the
+window. Their full-size screenshot (720 rows, 3 per game line) showed it
+was the lower two of the last game line's three rows, and what they showed
+was the level just below the screen (down the left edge, the level's
+hazard border where the rows above were sky). My own captures had it too
+(280-400 of 1140 columns differing between the top and bottom of the last
+line, on three of four levels); I had missed it.
+
+Cause: S2DEX bg1Cyc draws a background in slices and, with bilerp, loads
+one image line more than it draws. On the N64 each pixel samples at its
+top, so that line only ever gets a zero weight. RT64 drawing at a higher
+resolution samples further down in the lower part of each line: within the
+frame that's the frame's own next line and looks right, but on the frame's
+last line it's the image past the frame (the next line of the level, or its
+top where the image wraps).
+
+`lib-patches/rt64/0029`: the last slice of a background clamps T at the
+last image line the frame shows. New captures on three levels: 0 columns
+differ, and the landscape still lines up (round 10's check).
+
 ## 2026-11-21, round 11: wave rows cut on the left, the landscape mirrored on the right
 
 The owner's next widescreen run: the top rows of the water (sand waves on
