@@ -1,0 +1,174 @@
+S2DEX object rectangles: G_OBJ_RECTANGLE and the rectangle half of
+G_OBJ_LDTX_RECT (warecomp STATUS.md round 6).
+
+RT64 loaded the texture for G_OBJ_LDTX_RECT and then drew nothing (a TODO
+and an assert that release builds compile out), and G_OBJ_RECTANGLE wasn't
+mapped. Worms Armageddon draws every worm with G_OBJ_LDTX_RECT, so they
+were invisible.
+
+doObjRectangle sets the render tile from the uObjSprite (format, size,
+TMEM line and address, palette; clamped unless G_OBJRM_NOTXCLAMP), and
+draws one texture rectangle at objX, objY, imageW x imageH texels divided
+by the scale, flipped in S or T per G_OBJ_FLAG_FLIPS/FLIPT, with copy
+mode's inclusive lower right edge. Rotated and matrix sprites
+(G_OBJ_SPRITE, G_OBJ_LDTX_SPRITE, the _R variants) are still not done.
+
+--- a/src/gbi/rt64_gbi_s2dex.h
++++ b/src/gbi/rt64_gbi_s2dex.h
+@@ -19,6 +19,9 @@
+ #define S2DEX_G_BGLT_LOADTILE 0xFFF4
+ #define S2DEX_G_BG_FLAG_FLIPS 0x01
+ #define S2DEX_G_BG_FLAG_FLIPT 0x10
++#define S2DEX_G_OBJ_RECTANGLE 0x03
++#define S2DEX_G_OBJ_FLAG_FLIPS 0x01
++#define S2DEX_G_OBJ_FLAG_FLIPT 0x10
+ #define S2DEX_G_OBJRM_NOTXCLAMP 0x01
+ #define S2DEX_G_OBJRM_XLU 0x02
+ #define S2DEX_G_OBJRM_ANTIALIAS 0x04
+@@ -93,13 +96,33 @@
+             uint32_t mask;
+         };
+ 
++        // Each 32-bit word's halves swapped, and the bytes of the last one
++        // reversed, like the structures above.
++        struct uObjSprite {
++            uint16_t scaleW;     // u5.10
++            int16_t objX;        // s10.2
++            uint16_t paddingX;
++            uint16_t imageW;     // u10.5
++            uint16_t scaleH;     // u5.10
++            int16_t objY;        // s10.2
++            uint16_t paddingY;
++            uint16_t imageH;     // u10.5
++            uint16_t imageAdrs;  // TMEM address, 64-bit words
++            uint16_t imageStride; // TMEM line, 64-bit words
++            uint8_t imageFlags;
++            uint8_t imagePal;
++            uint8_t imageSiz;
++            uint8_t imageFmt;
++        };
++
+         struct uObjTxSprite {
+             uObjTxtr txtr;
+-            // uObjSprite sprite;
++            uObjSprite sprite;
+         };
+ #pragma pack(pop)
+ 
+         void objRenderMode(State *state, DisplayList **dl);
++        void objRectangle(State *state, DisplayList **dl);
+         void moveWord(State *state, DisplayList **dl);
+         void bg1Cyc(State *state, DisplayList **dl);
+         void bgCopy(State *state, DisplayList **dl);
+--- a/src/gbi/rt64_gbi_s2dex.cpp
++++ b/src/gbi/rt64_gbi_s2dex.cpp
+@@ -4,6 +4,8 @@
+ 
+ #include "rt64_gbi_s2dex.h"
+ 
++#include <algorithm>
++
+ #include "../include/rt64_extended_gbi.h"
+ 
+ #include "rt64_gbi_extended.h"
+@@ -546,6 +548,62 @@
+             }
+         }
+ 
++        // gSPObjRectangle: an unrotated sprite, the texture already in TMEM.
++        // The render tile is set from the sprite, then one texture rectangle
++        // is drawn at objX, objY, imageW x imageH texels scaled by 1 / scale,
++        // flipped in S or T as the sprite's flags say.
++        void doObjRectangle(State *state, const uObjSprite &sprite) {
++            RDP *rdp = state->rdp.get();
++            const uint32_t renderMode = state->rsp->objRenderMode;
++
++            // Texels (imageW and imageH are u10.5).
++            const int32_t texW = std::max<int32_t>(sprite.imageW >> 5, 1);
++            const int32_t texH = std::max<int32_t>(sprite.imageH >> 5, 1);
++            const uint8_t clamp = (renderMode & S2DEX_G_OBJRM_NOTXCLAMP) ? (G_TX_WRAP | G_TX_NOMIRROR) : (G_TX_CLAMP | G_TX_NOMIRROR);
++            rdp->setTile(G_TX_RENDERTILE, sprite.imageFmt, sprite.imageSiz, sprite.imageStride, sprite.imageAdrs, sprite.imagePal,
++                clamp, clamp, G_TX_NOMASK, G_TX_NOMASK, G_TX_NOLOD, G_TX_NOLOD);
++            rdp->setTileSize(G_TX_RENDERTILE, 0, 0, (texW - 1) << 2, (texH - 1) << 2);
++
++            // On screen (s10.2): the image's size divided by the scale (u5.10, 1.0 = 0x400).
++            const int32_t scaleW = (sprite.scaleW != 0) ? sprite.scaleW : 0x400;
++            const int32_t scaleH = (sprite.scaleH != 0) ? sprite.scaleH : 0x400;
++            const int32_t ulx = sprite.objX;
++            const int32_t uly = sprite.objY;
++            const int32_t lrx = ulx + ((int32_t(sprite.imageW) * 0x400 / scaleW) >> 3);
++            const int32_t lry = uly + ((int32_t(sprite.imageH) * 0x400 / scaleH) >> 3);
++
++            // Texture step per pixel (s5.10): 1 / scale. Starting texel (s10.5).
++            int32_t dsdx = (1 << 20) / scaleW;
++            int32_t dtdy = (1 << 20) / scaleH;
++            int32_t uls = 0;
++            int32_t ult = 0;
++            if (sprite.imageFlags & S2DEX_G_OBJ_FLAG_FLIPS) {
++                uls = (texW << 5) - 1;
++                dsdx = -dsdx;
++            }
++            if (sprite.imageFlags & S2DEX_G_OBJ_FLAG_FLIPT) {
++                ult = (texH << 5) - 1;
++                dtdy = -dtdy;
++            }
++
++            // Copy mode draws the lower right edge inclusively.
++            const bool copyMode = (rdp->otherMode.cycleType() == G_CYC_COPY);
++            const int32_t lrSubstract = copyMode ? 4 : 0;
++            if (copyMode) {
++                dsdx = 4 << 10;
++            }
++
++            state->startSpriteCommand(0);
++            rdp->drawTexRect(ulx, uly, lrx - lrSubstract, lry - lrSubstract, G_TX_RENDERTILE, int16_t(uls), int16_t(ult), int16_t(dsdx), int16_t(dtdy), false);
++            state->endSpriteCommand();
++        }
++
++        void objRectangle(State *state, DisplayList **dl) {
++            readS2DStruct(state, (*dl)->w1, sizeof(uObjSprite));
++            const uObjSprite *sprite = reinterpret_cast<const uObjSprite *>(state->rsp->S2D.struct_buffer.data());
++            doObjRectangle(state, *sprite);
++        }
++
+         void objLoadTxtr(State *state, DisplayList **dl) {
+         #ifdef LOG_LOADTXTR_METHODS
+             RT64_LOG_PRINTF("objLoadTxtr::start(0x%08X)", (*dl)->w1);
+@@ -592,8 +650,7 @@
+             doLoadTxtr(state, &obj->txtr);
+             
+             // Execute the rect draw
+-            // TODO call doObjRectangle(state, &obj->sprite) when it's implemented
+-            assert(false);
++            doObjRectangle(state, obj->sprite);
+         #ifdef LOG_LOADTXTR_METHODS
+             RT64_LOG_PRINTF("objLoadTxRect::end(0x%08X)", (*dl)->w1);
+         #endif
+@@ -644,6 +701,7 @@
+             gbi->map[S2DEX_G_OBJ_LOADTXTR] = &objLoadTxtr;
+             gbi->map[S2DEX_G_OBJ_LDTX_SPRITE] = &objLoadTxSprite;
+             gbi->map[S2DEX_G_OBJ_LDTX_RECT] = &objLoadTxRect;
++            gbi->map[S2DEX_G_OBJ_RECTANGLE] = &objRectangle;
+             gbi->map[S2DEX_G_OBJ_LDTX_RECT_R] = &objLoadTxRectR;
+             gbi->map[F3D_G_DL] = &GBI_F3D::runDl;
+             gbi->map[F3D_G_ENDDL] = &GBI_F3D::endDl;
+--- a/src/gbi/rt64_gbi_s2dex2.h
++++ b/src/gbi/rt64_gbi_s2dex2.h
+@@ -7,6 +7,7 @@
+ #include "rt64_gbi.h"
+ 
+ #define S2DEX2_G_OBJ_RENDERMODE 0x0B
++#define S2DEX2_G_OBJ_RECTANGLE 0x01
+ #define S2DEX2_G_BG_1CYC 0x09
+ #define S2DEX2_G_BG_COPY 0x0A
+ #define S2DEX2_G_RDPHALF_0 0xE4
+--- a/src/gbi/rt64_gbi_s2dex2.cpp
++++ b/src/gbi/rt64_gbi_s2dex2.cpp
+@@ -70,6 +70,7 @@
+             gbi->map[S2DEX2_G_OBJ_LOADTXTR] = &GBI_S2DEX::objLoadTxtr;
+             gbi->map[S2DEX2_G_OBJ_LDTX_SPRITE] = &GBI_S2DEX::objLoadTxSprite;
+             gbi->map[S2DEX2_G_OBJ_LDTX_RECT] = &GBI_S2DEX::objLoadTxRect;
++            gbi->map[S2DEX2_G_OBJ_RECTANGLE] = &GBI_S2DEX::objRectangle;
+             gbi->map[S2DEX2_G_OBJ_LDTX_RECT_R] = &GBI_S2DEX::objLoadTxRectR;
+             gbi->map[F3DEX2_G_DL] = &GBI_F3D::runDl;
+             gbi->map[F3DEX2_G_MOVEWORD] = &moveWord;

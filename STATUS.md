@@ -3,6 +3,31 @@
 How each piece of the port was found and fixed, newest first. PROGRESS.md
 has the short version.
 
+## 2026-11-21, round 6: the worms were invisible (RT64's S2DEX object rectangles)
+
+The owner could play a match, but the worms were invisible (name tags and
+health showed). The game draws everything with **S2DEX2**, the 2D sprite
+microcode (the graphics microcode at 0x800168A0; opcodes 0x09 BG_1CYC,
+0x07 OBJ_LDTX_RECT, 0x0B OBJ_RENDERMODE...). A frame's display list
+(decoded from an RDRAM dump taken at osSpTaskStartGo) has 38 BG_1CYC
+(terrain, scenery, tags, HUD) and 22 OBJ_LDTX_RECT: the worms (16 x 12-17
+texels, CI8, some with G_OBJ_FLAG_FLIPS) and small particles, all in
+1-cycle mode with object render mode 0x9 (NOTXCLAMP | BILERP). Their
+pixel data was in RDRAM, and RT64's written-back frame had no worms
+either: RT64's `objLoadTxRect` loaded the texture and then drew nothing
+(a TODO and an assert compiled out in release; upstream RT64 the same),
+and G_OBJ_RECTANGLE wasn't mapped.
+
+`lib-patches/rt64/0024-s2dex-object-rectangles.patch` implements the
+unrotated object rectangle (`doObjRectangle`): render tile from the
+uObjSprite (format, size, TMEM line and address, palette; clamp unless
+NOTXCLAMP), one texture rectangle at objX, objY sized imageW/H divided by
+the scale, S/T flips, copy mode's inclusive edge. Used by
+G_OBJ_LDTX_RECT and G_OBJ_RECTANGLE (S2DEX 0x03, S2DEX2 0x01). The worms,
+crates and debris now show. Rotated and matrix sprites (G_OBJ_SPRITE,
+G_OBJ_LDTX_SPRITE, the _R variants) are still not implemented; this game's
+frames haven't used them so far.
+
 ## 2026-11-21, round 5: into a match; the match's coroutines
 
 The owner's run froze at a black screen on starting a single-player quick
