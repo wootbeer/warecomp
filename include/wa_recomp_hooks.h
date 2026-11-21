@@ -13,7 +13,7 @@
 // Widescreen (src/game/widescreen.cpp): how far past each side of the 320
 // pixel screen the drawing library now draws. The right-edge constants in
 // wa.us.toml's instruction patches are 0x141 + this and 0x140 + this.
-#define WA_WS_EXTRA 128
+#define WA_WS_EXTRA 272
 
 #ifdef __cplusplus
 extern "C" {
@@ -42,6 +42,8 @@ void wa_coro_resume(uint8_t* rdram, recomp_context* ctx);
 
 // src/game/widescreen.cpp: screen-edge clipping at -WA_WS_EXTRA and
 // 320 + WA_WS_EXTRA.
+void wa_hud_entry(uint8_t* rdram, recomp_context* ctx);
+void wa_hud_end(uint8_t* rdram, recomp_context* ctx);
 void wa_ws_clip_7c74(uint8_t* rdram, recomp_context* ctx);
 void wa_ws_clip_8010(uint8_t* rdram, recomp_context* ctx);
 void wa_ws_clip_9320(uint8_t* rdram, recomp_context* ctx);

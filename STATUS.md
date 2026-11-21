@@ -3,6 +3,33 @@
 How each piece of the port was found and fixed, newest first. PROGRESS.md
 has the short version.
 
+## 2026-11-21, round 15: HUD anchoring, ultrawide
+
+**HUD.** The match HUD is in the level's draw list (game_8005FC70): type-1
+entries whose owner (high half of the entry's second word) is 1, each one
+background drawn by func_80008010: the turn timer, the teams' names and
+health bars, the wind bar. A hook at each entry (0x8005FD1C) marks HUD
+entries; in the blitter's clip block (wa_ws_clip_8010) a HUD element ending
+left of x 80 gets gEXSetRectAlign to the left edge, one starting at x 200 or
+right of it to the right edge (offset by -320 * 4, as RT64 adds the
+framebuffer width), written into the display list just before its own
+commands; the next entry and the end of the walk (0x80060504) reset it. The
+team bars stay centred. The Graphics tab's HUD Ratio decides how far out the
+anchored elements go (default "Clamp16x9": the edges of a 16:9 area).
+
+**Ultrawide.** WA_WS_EXTRA 128 -> 272: the drawing library draws from -272
+to 592, enough for 32:9 (853 game pixels across at 240 lines). The
+right-edge constants in the instruction patches become 0x251 / 0x250.
+Checked in a 2560 x 720 window (Xvfb; resize the game's own window, the
+second one xdotool finds): level, water, parallax layers and girders reach
+both edges, the HUD at the edges of the 16:9 area.
+
+**0029 again.** At 32:9 the landscape's slices are 864 texels wide and hold
+two lines, with no room for 0029's copy line: the bottom-edge sliver came
+back. The last slice now draws its last line on its own, from a TMEM
+loaded with only that image line, twice (fits any slice that holds two
+lines). 32:9 and 16:9: bottom edge clean (0 columns), tag borders complete.
+
 ## 2026-11-21, round 14: audio crackling
 
 The owner heard crackling every so often. Logging what reaches

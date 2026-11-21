@@ -17,7 +17,8 @@ and leave the game's own behaviour, look and balance alone.
   libultra is named from signatures; the overlays share addresses and are
   told apart by section.
 - **Widescreen**: the level fills wide windows, with the landscape and
-  sprites in step (STATUS.md rounds 7, 8, 10 and 11).
+  sprites in step (STATUS.md rounds 7, 8, 10 and 11), up to 32:9, with the HUD
+  anchored to the edges per the HUD Ratio setting (round 15).
 - **Graphics**: the game draws with S2DEX2 (2D sprites); RT64 needed
   object rectangles added (`lib-patches/rt64/0024`, STATUS.md round 6).
 - **Audio microcode**: n_aspMain, the same build btgarecomp uses,
@@ -33,8 +34,6 @@ and leave the game's own behaviour, look and balance alone.
 
 - Play testing: whole matches, other modes, saving (EEPROM).
 - Saves: the cartridge EEPROM (set to 4 Kbit; confirm in game).
-- Widescreen: the HUD following the HUD Ratio setting (the level is
-  widescreen since round 7).
 - Steam Deck: the Linux build (`tools/package-linux.sh`) once it runs.
 - Android: see `android/PLAN.md`; the match's coroutines need an aarch64
   context switch there (`src/game/coroutines.cpp`).
