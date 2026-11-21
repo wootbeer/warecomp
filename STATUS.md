@@ -3,6 +3,24 @@
 How each piece of the port was found and fixed, newest first. PROGRESS.md
 has the short version.
 
+## 2026-11-21, round 9: a D3D12 crash in RT64's texture thread
+
+The owner's Windows build crashed starting a level, in the "RT64 Texture"
+thread reading address 0. Symbolized with llvm-symbolizer against the
+build's .pdb (addresses need the image base, 0x140000000 + the crash log's
+offset): `plume::setObjectName` (plume_d3d12.cpp) from
+`TextureCache::uploadThreadLoop` (rt64_texture_cache.cpp), which creates a
+texture at the upload's size and then names it. D3D12 refuses a size of 0
+or past 16384, the texture is null, and naming it crashes. Not reproduced
+on Linux/Vulkan in four level starts.
+
+`lib-patches/rt64/0026`: the texture cache keeps a decoded texture between
+1 and 8192 on each side, and the S2DEX object rectangle (0024) skips
+sprites whose image size is under a texel or has the top bit set (the
+game sends some: one frame had a sprite with a negative width). Which draw
+asked for the bad size isn't confirmed; this keeps any of them from
+crashing.
+
 ## 2026-11-21, round 8: widescreen, the old 4:3 edges in RT64
 
 The owner's widescreen run: terrain and backgrounds filled the window, but
