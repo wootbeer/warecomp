@@ -55,6 +55,7 @@
 #include "librecomp/helpers.hpp"
 
 #include "wa_config.h"
+#include "wa_cheats.h"
 #include "wa_steam.h"
 
 #if defined(WA_HAS_APP_ICON)
@@ -646,6 +647,7 @@ int main(int argc, char** argv) {
     wa::config::add_graphics_options(recompui::config::create_graphics_tab());
     recompui::config::create_controls_tab();
     recompui::config::create_sound_tab();
+    wa::cheats::add_cheats_tabs();
     recompui::config::create_mods_tab();
     recompui::config::finalize();
     wa::init_mouse_stick();

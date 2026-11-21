@@ -91,12 +91,24 @@ void wa::config::add_graphics_options(recomp::config::Config& graphics) {
         RT64::Bloom::Off
     );
 
+    graphics.add_bool_option(
+        "hide_level_border",
+        "Hide Level Border",
+        "Hides the striped border the game draws around the level's bounds. The bounds are still there: "
+        "worms and weapons stop at them as before.",
+        false
+    );
+
     wa::config::add_frame_generation_options(graphics);
 
     // Also called when the saved settings load.
     graphics.add_option_change_callback("screen_filter",
         [](recomp::config::ConfigValueVariant value, recomp::config::ConfigValueVariant, recomp::config::OptionChangeContext) {
             RT64::setScreenFilter(static_cast<RT64::ScreenFilter>(std::get<uint32_t>(value)));
+        });
+    graphics.add_option_change_callback("hide_level_border",
+        [](recomp::config::ConfigValueVariant value, recomp::config::ConfigValueVariant, recomp::config::OptionChangeContext) {
+            wa::set_hide_level_border(std::get<bool>(value));
         });
     graphics.add_option_change_callback("bloom",
         [](recomp::config::ConfigValueVariant value, recomp::config::ConfigValueVariant, recomp::config::OptionChangeContext) {

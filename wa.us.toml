@@ -61,6 +61,7 @@ func = "func_80033948"
 before_vram = 0x800339C4
 text = """
     recomp_run_ui_callbacks(rdram, ctx);
+    wa_cheats_frame(rdram);
 """
 
 # Busy-waits. Two small routines spin on memory another thread changes, with
@@ -329,4 +330,14 @@ func = "game_8005FC70"
 before_vram = 0x80060504
 text = """
     wa_hud_end(rdram, ctx);
+"""
+
+# Hide Level Border (STATUS.md round 16, src/game/level_border.cpp): the
+# game's palette again after the landscape (func_80009320's return; its early
+# outs come here too, and do nothing then). $s3 is the drawing library.
+[[patches.hook]]
+func = "func_80009320"
+before_vram = 0x80009588
+text = """
+    wa_level_border_end(rdram, ctx);
 """

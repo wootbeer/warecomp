@@ -26,6 +26,7 @@ void recomp_run_ui_callbacks(uint8_t* rdram, recomp_context* ctx);
 // src/main/scheduler_workaround.cpp: called from the game's busy-wait loops
 // so the thread that ends the wait gets to run.
 bool wa_audio_fifo_full(void);
+void wa_cheats_frame(uint8_t* rdram);
 void wa_yield_via_priority_drop(uint8_t* rdram);
 
 // src/game/overlays.cpp: registers the code overlay just DMA'd to 0x80048FE0
@@ -44,6 +45,8 @@ void wa_coro_resume(uint8_t* rdram, recomp_context* ctx);
 // 320 + WA_WS_EXTRA.
 void wa_hud_entry(uint8_t* rdram, recomp_context* ctx);
 void wa_hud_end(uint8_t* rdram, recomp_context* ctx);
+void wa_level_border_begin(uint8_t* rdram, gpr lib);
+void wa_level_border_end(uint8_t* rdram, recomp_context* ctx);
 void wa_ws_clip_7c74(uint8_t* rdram, recomp_context* ctx);
 void wa_ws_clip_8010(uint8_t* rdram, recomp_context* ctx);
 void wa_ws_clip_9320(uint8_t* rdram, recomp_context* ctx);

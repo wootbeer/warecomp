@@ -3,6 +3,44 @@
 How each piece of the port was found and fixed, newest first. PROGRESS.md
 has the short version.
 
+## 2026-11-21, round 16: Hide Level Border, the Hacks tab
+
+**Hide Level Border** (Graphics tab). The striped border around a level is
+part of the landscape image (960 x 348 CI8): an 8-pixel band along the top
+and both sides, in palette entries 1 and 4, which the landscape uses for
+nothing else (counted in seven levels). The image is left alone, in case the
+game uses it for collisions. The game loads one palette (0x8012CCB4) for the
+whole frame and the HUD uses entries 1 and 4 too (the health bars, the
+timer's frame: up to 251 pixels), so the landscape gets its own copy with
+those two entries transparent: loaded just before its background command
+(from wa_ws_clip_9320) and the game's palette loaded again after it (a hook
+at func_80009320's return, 0x80009588), with the game's own load sequence
+(FD, E8, F5, E6, F0, E7). The copy is at 0x80700000: nothing is ever written
+above 4 MB (four dumps). Checked: a level with 1920 border pixels in view
+shows none of them, the HUD keeps its colours.
+
+**Hacks tab** (src/game/cheats.cpp, src/main/cheats_config.cpp, from
+btgarecomp's): the owner's GameShark codes, applied once a frame after the
+swap: Open All Missions / Open All Training (pickers: team 1-6 or all;
+0x800C5BD7 / 0x800C5BD9, teams 0x100 apart), Enable Basic Training Levels
+(810C8D80 000B), Infinite Health (worm 1-6 or all; conditional codes on
+0x8025FF9C / 0x80260FEC, worms 0xA0 apart). Left out: the button
+activators (they only gate another code) and "All Training Levels (1st
+created team)", the same as Open All Training for team 1. Checked: with
+All Teams, every team's missions byte reads 0x1B. The Cheats tab appears once
+there are codes of the game's own for it.
+
+**The game's own codes.** The N64 version has no cheat menu; it checks a
+new team's name against 34 secret names (front_8005EC64: "23gu5sbr",
+"01091975", "Hpf6vi9d", ..., "Ctfacile", "Toupeter", "Simpsons", "Beru"),
+and front_8005F05C acts on the match through a jump table. Most set a flag
+in an array at +0x1BE of the settings object (*0x8008EDAC + 4, set by
+front_80083034, read by front_80083020); "3xmr8f56" cycles flag 0 through
+0-2; the French ones (Ctropdur, Ctfacile, Ctrohard, Qqpompes, Jai peur,
+Jsuigran, F5x3e964) raise or lower fields of the team being made. Only
+"Simpsons" is documented anywhere; what each flag does is still to be found
+(flag 5 adds a sixth entry to a five-item menu list).
+
 ## 2026-11-21, round 15: HUD anchoring, ultrawide
 
 **HUD.** The match HUD is in the level's draw list (game_8005FC70): type-1

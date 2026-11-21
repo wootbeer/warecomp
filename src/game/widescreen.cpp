@@ -122,6 +122,9 @@ extern "C" void wa_ws_clip_9320(uint8_t* rdram, recomp_context* ctx) {
     MEM_H(0x2, obj) = (int16_t)(w << 2);
     ctx->r3 = frameW;
     ctx->r2 = (gpr)(int32_t)(frameW << 2);
+
+    // Hide Level Border (src/game/level_border.cpp).
+    wa_level_border_begin(rdram, ctx->r19);
 }
 
 // --- HUD anchoring (STATUS.md round 15) -----------------------------------
