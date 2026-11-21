@@ -3,6 +3,24 @@
 How each piece of the port was found and fixed, newest first. PROGRESS.md
 has the short version.
 
+## 2026-11-21, round 19: the air strike's cursor didn't show
+
+The drawing library's func_8000762C has a path for rotating sprites: it
+writes a 2D rotation matrix ([c s; -s c], with translation and base scale)
+and emits G_OBJ_MOVEMEM (DC17: gSPObjMatrix, 24 bytes) then
+G_OBJ_LDTX_SPRITE (06..2F). RT64 handled neither: no G_OBJ_MOVEMEM in its
+S2DEX2 table, and G_OBJ_LDTX_SPRITE (like G_OBJ_LDTX_RECT_R) loaded the
+texture and drew nothing (TODOs). The air strike's target cursor is one
+of these (owner's report: invisible).
+
+`lib-patches/rt64/0030`: G_OBJ_MOVEMEM keeps the matrix (24 bytes, or the
+8-byte sub-matrix); G_OBJ_SPRITE and G_OBJ_LDTX_SPRITE draw the sprite as an
+upright rectangle the size the matrix scales it to, centred where the matrix
+puts its centre (no rotation: RT64's rectangles are axis-aligned);
+G_OBJ_LDTX_RECT_R through the matrix's translation and base scale. None of
+the captured frames use these commands, so nothing already drawn changes.
+Not seen here (weapons couldn't be picked from xdotool); the owner checks.
+
 ## 2026-11-21, round 18: the weapon panel jumped back to its 4:3 place
 
 The owner's video: the weapon panel slid in from the right edge as it

@@ -1,0 +1,159 @@
+S2DEX sprites through the 2D matrix are drawn (warecomp STATUS.md round 19).
+
+G_OBJ_MOVEMEM (gSPObjMatrix, gSPObjSubMatrix) wasn't handled, and
+G_OBJ_SPRITE / G_OBJ_LDTX_SPRITE / G_OBJ_LDTX_RECT_R loaded their texture
+and drew nothing (TODOs). Worms Armageddon draws its rotating sprites that
+way (func_8000762C: a rotation matrix, then G_OBJ_LDTX_SPRITE), among them
+the air strike's target cursor, which didn't show at all.
+
+The matrix is kept; a matrix sprite is drawn as an upright rectangle the
+size the matrix scales it to, centred where the matrix puts its centre (the
+rotation itself is left out, as RT64's rectangles are axis-aligned); a
+RECTANGLE_R through the matrix's translation and base scale.
+
+--- a/src/gbi/rt64_gbi_s2dex.h
++++ b/src/gbi/rt64_gbi_s2dex.h
+@@ -123,6 +123,8 @@
+ 
+         void objRenderMode(State *state, DisplayList **dl);
+         void objRectangle(State *state, DisplayList **dl);
++        void objSprite(State *state, DisplayList **dl);
++        void objMoveMem(State *state, DisplayList **dl);
+         void moveWord(State *state, DisplayList **dl);
+         void bg1Cyc(State *state, DisplayList **dl);
+         void bgCopy(State *state, DisplayList **dl);
+--- a/src/gbi/rt64_gbi_s2dex.cpp
++++ b/src/gbi/rt64_gbi_s2dex.cpp
+@@ -5,6 +5,7 @@
+ #include "rt64_gbi_s2dex.h"
+ 
+ #include <algorithm>
++#include <cmath>
+ 
+ #include "../include/rt64_extended_gbi.h"
+ 
+@@ -639,6 +640,82 @@
+             state->endSpriteCommand();
+         }
+ 
++        // The 2D matrix (gSPObjMatrix / gSPObjSubMatrix through G_OBJ_MOVEMEM).
++        struct ObjMatrix {
++            int32_t A = 0x10000, B = 0, C = 0, D = 0x10000; // s15.16
++            int16_t X = 0, Y = 0;                           // s10.2
++            uint16_t BaseScaleX = 0x400, BaseScaleY = 0x400; // u5.10
++        };
++        ObjMatrix objMatrix;
++
++        void objMoveMem(State *state, DisplayList **dl) {
++            const uint32_t length = (((*dl)->w0 >> 16) & 0xFF) + 1;
++            uint32_t rdramAddress = state->rsp->fromSegmentedMasked((*dl)->w1) & RSP_DMA_MASK;
++            const uint32_t *words = reinterpret_cast<const uint32_t *>(state->fromRDRAM(rdramAddress));
++            // Words as RDRAM holds them: a 32-bit field each, or two 16-bit fields,
++            // the first in the upper half.
++            if (length >= 24) {
++                objMatrix.A = int32_t(words[0]);
++                objMatrix.B = int32_t(words[1]);
++                objMatrix.C = int32_t(words[2]);
++                objMatrix.D = int32_t(words[3]);
++                words += 4;
++            }
++            if (length >= 8) {
++                objMatrix.X = int16_t(words[0] >> 16);
++                objMatrix.Y = int16_t(words[0] & 0xFFFF);
++                objMatrix.BaseScaleX = uint16_t(words[1] >> 16);
++                objMatrix.BaseScaleY = uint16_t(words[1] & 0xFFFF);
++            }
++        }
++
++        // A sprite through the 2D matrix (G_OBJ_SPRITE and G_OBJ_LDTX_SPRITE). The
++        // microcode draws it as the matrix turns it; drawn here as an upright
++        // rectangle the size the matrix scales it to, centred where the matrix puts
++        // its centre. A rotating sprite (Worms Armageddon's air strike target, among
++        // others) shows, just without the rotation.
++        void doObjSprite(State *state, const uObjSprite &sprite) {
++            const double a = objMatrix.A / 65536.0, b = objMatrix.B / 65536.0;
++            const double c = objMatrix.C / 65536.0, d = objMatrix.D / 65536.0;
++            const double scaleW = (sprite.scaleW != 0) ? sprite.scaleW : 0x400;
++            const double scaleH = (sprite.scaleH != 0) ? sprite.scaleH : 0x400;
++            const double width = (sprite.imageW / 32.0) * 1024.0 / scaleW;
++            const double height = (sprite.imageH / 32.0) * 1024.0 / scaleH;
++            const double px = sprite.objX / 4.0 + width / 2.0;
++            const double py = sprite.objY / 4.0 + height / 2.0;
++            const double cx = objMatrix.X / 4.0 + a * px + b * py;
++            const double cy = objMatrix.Y / 4.0 + c * px + d * py;
++            const double sx = std::max(std::sqrt(a * a + c * c), 1.0 / 32.0);
++            const double sy = std::max(std::sqrt(b * b + d * d), 1.0 / 32.0);
++            uObjSprite upright = sprite;
++            upright.scaleW = uint16_t(std::clamp(scaleW / sx, 1.0, 65535.0));
++            upright.scaleH = uint16_t(std::clamp(scaleH / sy, 1.0, 65535.0));
++            upright.objX = int16_t(std::lround((cx - width * sx / 2.0) * 4.0));
++            upright.objY = int16_t(std::lround((cy - height * sy / 2.0) * 4.0));
++            doObjRectangle(state, upright);
++        }
++
++        // G_OBJ_RECTANGLE_R: a rectangle placed by the matrix's translation and
++        // base scale only.
++        void doObjRectangleR(State *state, const uObjSprite &sprite) {
++            const double baseX = (objMatrix.BaseScaleX != 0) ? objMatrix.BaseScaleX : 0x400;
++            const double baseY = (objMatrix.BaseScaleY != 0) ? objMatrix.BaseScaleY : 0x400;
++            uObjSprite placed = sprite;
++            const double scaleW = (sprite.scaleW != 0) ? sprite.scaleW : 0x400;
++            const double scaleH = (sprite.scaleH != 0) ? sprite.scaleH : 0x400;
++            placed.objX = int16_t(std::lround(objMatrix.X + sprite.objX * 1024.0 / baseX));
++            placed.objY = int16_t(std::lround(objMatrix.Y + sprite.objY * 1024.0 / baseY));
++            placed.scaleW = uint16_t(std::clamp(scaleW * baseX / 1024.0, 1.0, 65535.0));
++            placed.scaleH = uint16_t(std::clamp(scaleH * baseY / 1024.0, 1.0, 65535.0));
++            doObjRectangle(state, placed);
++        }
++
++        void objSprite(State *state, DisplayList **dl) {
++            readS2DStruct(state, (*dl)->w1, sizeof(uObjSprite));
++            const uObjSprite *sprite = reinterpret_cast<const uObjSprite *>(state->rsp->S2D.struct_buffer.data());
++            doObjSprite(state, *sprite);
++        }
++
+         void objRectangle(State *state, DisplayList **dl) {
+             readS2DStruct(state, (*dl)->w1, sizeof(uObjSprite));
+             const uObjSprite *sprite = reinterpret_cast<const uObjSprite *>(state->rsp->S2D.struct_buffer.data());
+@@ -672,8 +749,7 @@
+             doLoadTxtr(state, &obj->txtr);
+             
+             // Execute the sprite draw
+-            // TODO call doObjSprite(state, &obj->sprite) when it's implemented
+-            assert(false);
++            doObjSprite(state, obj->sprite);
+         #ifdef LOG_LOADTXTR_METHODS
+             RT64_LOG_PRINTF("objLoadTxSprite::end(0x%08X)", (*dl)->w1);
+         #endif
+@@ -709,8 +785,7 @@
+             doLoadTxtr(state, &obj->txtr);
+             
+             // Execute the rect r draw
+-            // TODO call doObjRectangleR(state, &obj->sprite) when it's implemented
+-            assert(false);
++            doObjRectangleR(state, obj->sprite);
+         #ifdef LOG_LOADTXTR_METHODS
+             RT64_LOG_PRINTF("objLoadTxRectR::end(0x%08X)", (*dl)->w1);
+         #endif
+--- a/src/gbi/rt64_gbi_s2dex2.h
++++ b/src/gbi/rt64_gbi_s2dex2.h
+@@ -16,6 +16,8 @@
+ #define S2DEX2_G_OBJ_LDTX_SPRITE 0x06
+ #define S2DEX2_G_OBJ_LDTX_RECT 0x07
+ #define S2DEX2_G_OBJ_LDTX_RECT_R 0x08
++#define S2DEX2_G_OBJ_SPRITE 0x02
++#define S2DEX2_G_OBJ_MOVEMEM 0xDC
+ 
+ 
+ namespace RT64 {
+--- a/src/gbi/rt64_gbi_s2dex2.cpp
++++ b/src/gbi/rt64_gbi_s2dex2.cpp
+@@ -71,6 +71,8 @@
+             gbi->map[S2DEX2_G_OBJ_LDTX_SPRITE] = &GBI_S2DEX::objLoadTxSprite;
+             gbi->map[S2DEX2_G_OBJ_LDTX_RECT] = &GBI_S2DEX::objLoadTxRect;
+             gbi->map[S2DEX2_G_OBJ_RECTANGLE] = &GBI_S2DEX::objRectangle;
++            gbi->map[S2DEX2_G_OBJ_SPRITE] = &GBI_S2DEX::objSprite;
++            gbi->map[S2DEX2_G_OBJ_MOVEMEM] = &GBI_S2DEX::objMoveMem;
+             gbi->map[S2DEX2_G_OBJ_LDTX_RECT_R] = &GBI_S2DEX::objLoadTxRectR;
+             gbi->map[F3DEX2_G_DL] = &GBI_F3D::runDl;
+             gbi->map[F3DEX2_G_MOVEWORD] = &moveWord;
