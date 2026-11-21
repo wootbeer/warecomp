@@ -3,6 +3,31 @@
 How each piece of the port was found and fixed, newest first. PROGRESS.md
 has the short version.
 
+## 2026-11-21, round 10: floating worms in widescreen
+
+The owner saw some worms floating over the ground (or sunk into it) in
+widescreen, worse towards the sides. The game's own data had them standing
+on the landscape. A screenshot taken while the game thread was stopped at a
+frame's graphics task, with RDRAM dumped at the same moment, compared the
+landscape on screen with the landscape image that frame's BG_1CYC draws
+(a 960-pixel-wide CI8 image, frame -128 to 448): the sprites sat where the
+display list put them, but the landscape at the sides was about 45 game
+pixels off, towards the centre on both sides. The whole background was
+scaled about the centre, by about 3/4 (the 4:3 to 16:9 ratio).
+
+RT64's framebuffer renderer takes any rectangle that covers the whole
+scissor width for a full-screen background and stretches it to the wide
+target. The game draws its landscape for widescreen itself (round 7), as
+strips reaching past both sides of the screen, so it got stretched while
+the sprites didn't.
+
+`lib-patches/rt64/0027`: a rectangle reaching past the colour image's sides
+(left of 0 or right of its width) is drawn for a wider view and keeps its
+coordinates; full-screen rectangles inside the screen are stretched as
+before. With it, the same check finds the landscape at shift 0 across the
+window (left side, middle and right), and a blend of the expected
+landscape over the screenshot lines up everywhere.
+
 ## 2026-11-21, round 9: a D3D12 crash in RT64's texture thread
 
 The owner's Windows build crashed starting a level, in the "RT64 Texture"

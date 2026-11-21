@@ -1,0 +1,25 @@
+A rectangle reaching past the screen's sides isn't stretched as a
+full-screen one (warecomp STATUS.md round 10).
+
+With an expanded aspect ratio, a rect covering the whole scissor width is
+taken for a full-screen background and stretched to the wide target. Worms
+Armageddon draws its level's landscape for widescreen itself, as a
+background frame from -128 to 448: stretching that by the aspect ratio put
+the landscape out of step with the sprites (worms floating over the ground
+or sunk into it, worse towards the sides). A rect that reaches past the
+colour image's sides is drawn for a wider view, so it keeps its coordinates.
+
+--- a/src/render/rt64_framebuffer_renderer.cpp
++++ b/src/render/rt64_framebuffer_renderer.cpp
+@@ -1644,7 +1644,10 @@
+ 
+                             // The call's scissor spans the whole width of the framebuffer pair scissor. The rect must not be using extended origins.
+                             const bool regularOrigins = (call.callDesc.rectLeftOrigin == G_EX_ORIGIN_NONE) && (call.callDesc.rectRightOrigin == G_EX_ORIGIN_NONE);
+-                            const bool coversScissorWidth = regularOrigins && (call.callDesc.rect.ulx <= fbPair.scissorRect.ulx) && (call.callDesc.rect.lrx >= fbPair.scissorRect.lrx);
++                            // A rect reaching past the colour image's sides was drawn for a view wider than the screen
++                            // (the game draws for widescreen itself): it isn't a full-screen rect to stretch.
++                            const bool pastScreenSides = (call.callDesc.rect.ulx < 0) || (call.callDesc.rect.lrx > int32_t(p.fbWidth) * 4);
++                            const bool coversScissorWidth = regularOrigins && !pastScreenSides && (call.callDesc.rect.ulx <= fbPair.scissorRect.ulx) && (call.callDesc.rect.lrx >= fbPair.scissorRect.lrx);
+                             if ((tileCopiesUsed || coversScissorWidth || call.callDesc.rectAspect == G_EX_ASPECT_STRETCH) && (call.callDesc.rectAspect != G_EX_ASPECT_ADJUST)) {
+                                 invRatioScale = 1.0f;
+                             }
