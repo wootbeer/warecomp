@@ -3,6 +3,53 @@
 How each piece of the port was found and fixed, newest first. PROGRESS.md
 has the short version.
 
+## 2026-11-21, round 5: into a match; the match's coroutines
+
+The owner's run froze at a black screen on starting a single-player quick
+match. Reproduced by pressing A through the menus (xdotool on Xvfb). Three
+things, in order:
+
+1. **Waiting for the sound to stop**: `func_8000B55C` and `func_8000B5BC`
+   (stopping the music as the frontend hands over) loop on `func_8001FC28`,
+   the sound driver's count of channels still playing, until it's 0. Only
+   the audio thread brings it down. Same yield hook in both loops
+   (0x8000B584, 0x8000B5E8).
+2. **"Cannot partially unload section"**: my overlay hook unloaded
+   0x80048FE0 + 0x69110 (the DMA size), which ends exactly where the
+   modules start; the runtime's overlap test counts touching ranges, so it
+   tried to unload the loaded module and stopped. Unloads the largest
+   section's size (0x67FE0) now.
+3. **Segfault clearing the match's BSS**: right after loading the match the
+   loader zeroes 0x1120 bytes at 0xB00E7090, a cartridge ROM address (the
+   linker gave the ROM address of the BSS). On the N64 writes to cartridge
+   ROM are ignored; here it lands far outside memory. The `beqz $s0` that
+   skips the clear (0x80004514) is now an unconditional branch.
+
+Then the match ran (level, teams, turn timer, CPU turns, no input: no
+crash in 100 s), but the **first A press in a match crashed** with a null
+`this` in `game_8009E818`, 16 levels into a recursion of `game_800AAD00`.
+That is a coroutine system on the game's own setjmp/longjmp
+(`func_8001DA10` saves s0-s7, sp, fp, ra and returns 0; `func_8001DA50`
+restores them and returns its argument or 1), used only by three functions:
+`game_800AAD00` recurses to carve the coroutine's stack (0x418 a level,
+canary 0xAC1DCAFE), `game_800AAC9C` starts it (setjmp(obj + 0x48), runs the
+body, the virtual at vtable +0x54, then longjmps back), `game_800AAC68`
+yields (setjmp(obj + 0x88), longjmp(obj + 0x48, 1)), and `game_800AABB0`'s
+state-1 path resumes (setjmp(obj + 0x48), longjmp(obj + 0x88, 1)).
+Recompiled, a longjmp reloads the MIPS registers but execution on the host
+carries on where it was, with another frame's registers.
+
+`src/game/coroutines.cpp` runs each body on a fiber of its own (Windows
+fibers; ucontext on Linux and Steam Deck) on the same game thread, so the
+runtime's per-thread state is unaffected. Hooks replace the start and yield
+functions and the resume path; they save and restore exactly the registers
+the game's setjmp does and write N64 memory as the original code does (the
+jmp_bufs, stack slots, the object's state fields). The game's stack carving
+is left as it is. With it, pressing A through a match no longer crashes.
+Android has no ucontext: it needs a small aarch64 context switch of its
+own before matches work there (the file stops the build on Android until
+then).
+
 ## 2026-11-21, round 4: past the language screen, the main menu
 
 The owner's run crashed on confirming the language: "Failed to find

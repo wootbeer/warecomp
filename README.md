@@ -12,8 +12,8 @@ sharing its launcher, menus and graphics features.
 Unofficial, and not affiliated with the rights holders. **No game data is
 included.** You need your own dump of the game to build or play this.
 
-**Status: early work, not playable yet.** The game boots to its main menu;
-the rest of the menus and matches are untested. See
+**Status: early work, not playable yet.** The game boots, goes through the
+menus and plays a quick match; little else has been tested. See
 [PROGRESS.md](PROGRESS.md).
 
 ## Planned features

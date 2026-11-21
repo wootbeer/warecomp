@@ -28,6 +28,11 @@ void wa_load_overlay(uint32_t rom, uint32_t size);
 // 0xB0000000 + ROM offset, and size).
 void wa_load_module(uint32_t rom_k1, uint32_t size);
 
+// src/game/coroutines.cpp: the match's setjmp/longjmp coroutines on fibers.
+void wa_coro_start(uint8_t* rdram, recomp_context* ctx);
+void wa_coro_yield(uint8_t* rdram, recomp_context* ctx);
+void wa_coro_resume(uint8_t* rdram, recomp_context* ctx);
+
 #ifdef __cplusplus
 }
 #endif

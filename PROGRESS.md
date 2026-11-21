@@ -22,15 +22,17 @@ and leave the game's own behaviour, look and balance alone.
   controls, mouse stick, local multiplayer, screen filters, bloom,
   frame generation, mods tab, Add to Steam, crash reports, packaging.
 - **Builds on Linux** (Ubuntu 24.04, clang 18).
-- **Boots to the main menu**, drawn by RT64 (STATUS.md rounds 2-4).
+- **Boots, goes through the menus and plays a match** (single-player quick
+  match, Linux with software Vulkan; STATUS.md rounds 2-5).
 
 ## Next
 
-- The menus, then a match (the second overlay).
+- Play testing: whole matches, other modes, saving (EEPROM).
 - Saves: the cartridge EEPROM (set to 4 Kbit; confirm in game).
 - Widescreen: see what the game's HUD and menus need.
 - Steam Deck: the Linux build (`tools/package-linux.sh`) once it runs.
-- Android: see `android/PLAN.md`.
+- Android: see `android/PLAN.md`; the match's coroutines need an aarch64
+  context switch there (`src/game/coroutines.cpp`).
 
 ## Not planned yet
 

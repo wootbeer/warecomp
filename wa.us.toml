@@ -24,6 +24,17 @@ func = "recomp_entrypoint"
 vram = 0x80000438
 value = 0x03E00008
 
+# After loading the match overlay, the loader clears 0x1120 bytes "of its BSS"
+# at 0xB00E7090: a cartridge ROM address (the linker gave the BSS start's ROM
+# address). On the N64 writes to cartridge ROM are ignored, so nothing
+# happens; here every address is RAM, and the write lands far outside it
+# (segfault on starting a match, STATUS.md round 5). Always take the branch
+# that skips the clear (`beqz $s0` -> `b`, same target 0x8000452C).
+[[patches.instruction]]
+func = "func_8000405C"
+vram = 0x80004514
+value = 0x10000005
+
 # The launcher/menu UI's per-frame callback pump (recompui's
 # recomp_run_ui_callbacks), once per presented frame: in libultra's scheduler
 # (func_80033948, the task-complete handler), right after its
@@ -106,4 +117,56 @@ func = "front_8004F574"
 before_vram = 0x8004F77C
 text = """
     wa_load_module((uint32_t)ctx->r19, (uint32_t)ctx->r17);
+"""
+
+# Waiting for the sound to stop: func_8000B55C and func_8000B5BC (stopping the
+# music, e.g. as the frontend hands over to a match) call func_8001FC28, the
+# sound driver's count of channels still playing, in a loop until it's 0.
+# Only the audio thread brings the count down, and the loop never lets it
+# run (STATUS.md round 5). Loops: 0x8000B584 and 0x8000B5E8 (jal back to
+# itself through the bnez).
+[[patches.hook]]
+func = "func_8000B55C"
+before_vram = 0x8000B584
+text = """
+    wa_yield_via_priority_drop(rdram);
+"""
+
+[[patches.hook]]
+func = "func_8000B5BC"
+before_vram = 0x8000B5E8
+text = """
+    wa_yield_via_priority_drop(rdram);
+"""
+
+# The match's coroutines (src/game/coroutines.cpp, STATUS.md round 5): built
+# on the game's own setjmp/longjmp, which can't move execution on the host.
+# Each body runs on a fiber; these hooks replace the three functions that
+# switch (the code after each hook's `return`/`goto` doesn't run).
+# Start (game_800AAC9C, whole function).
+[[patches.hook]]
+func = "game_800AAC9C"
+before_vram = 0x800AAC9C
+text = """
+    wa_coro_start(rdram, ctx);
+    return;
+"""
+
+# Yield (game_800AAC68, whole function).
+[[patches.hook]]
+func = "game_800AAC68"
+before_vram = 0x800AAC68
+text = """
+    wa_coro_yield(rdram, ctx);
+    return;
+"""
+
+# Resume: game_800AABB0's state-1 path, 0x800AAC18-0x800AAC3C, then where
+# setjmp's nonzero return goes (0x800AAC40).
+[[patches.hook]]
+func = "game_800AABB0"
+before_vram = 0x800AAC18
+text = """
+    wa_coro_resume(rdram, ctx);
+    goto L_800AAC40;
 """

@@ -26,9 +26,12 @@
 
 namespace {
     constexpr int32_t kOverlayRam = (int32_t)0x80048FE0;
-    // The larger of the two (the match: 0x67FE0 of code and data; the loader
-    // DMAs 0x69110 with its BSS).
-    constexpr uint32_t kOverlaySpan = 0x69110;
+    // The larger of the two sections (the match: 0x67FE0 of code and data;
+    // the loader DMAs 0x69110 with its BSS). Not the DMA size: that ends
+    // exactly where the modules start (0x800B20F0), and the runtime's overlap
+    // test counts touching ranges as overlapping, so it would try to unload
+    // a loaded module and stop ("Cannot partially unload section", round 5).
+    constexpr uint32_t kOverlaySpan = 0x67FE0;
 
     constexpr int32_t kModuleRam = (int32_t)0x800B20F0;
     // The largest module (ROM 0x129760).
