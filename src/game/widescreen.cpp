@@ -18,6 +18,7 @@
 // edges by hooks there); the three functions below replace the blocks that
 // clip an object or background to the screen's left and right edges.
 #include <cstdint>
+#include <vector>
 
 #include "recomp.h"
 #include "wa_recomp_hooks.h"
@@ -27,7 +28,7 @@ namespace {
     constexpr int32_t kRight = 320 + WA_WS_EXTRA;
 
     // HUD anchoring (STATUS.md round 15), used by wa_ws_clip_8010 below.
-    void hud_element(uint8_t* rdram, gpr lib, int32_t x, int32_t w);
+    void hud_element(uint8_t* rdram, gpr lib, int32_t x, int32_t y, int32_t w, int32_t h);
 }
 
 // func_80007C74 (background), 0x80007E84-0x80007ED4. x = $s2, image width in
@@ -89,7 +90,7 @@ extern "C" void wa_ws_clip_8010(uint8_t* rdram, recomp_context* ctx) {
     }
     MEM_H(0x2, obj) = (int16_t)(texW << 2);
 
-    hud_element(rdram, ctx->r20, (int32_t)ctx->r17, w);
+    hud_element(rdram, ctx->r20, (int32_t)ctx->r17, (int32_t)ctx->r18, w, (int32_t)ctx->r21);
 }
 
 // func_80009320 (background), 0x8000941C-0x80009474. x = $s1, image width =
@@ -136,9 +137,14 @@ extern "C" void wa_ws_clip_9320(uint8_t* rdram, recomp_context* ctx) {
 // level (game_8005FC70 walks it): type-1 entries whose owner (the high half
 // of the entry's second word) is 1, each one background drawn by
 // func_80008010: the turn timer (left), the teams' names and health bars
-// (centred) and the wind bar (right). A HUD element that ends left of x 80
-// is anchored left and one that starts at x 200 or right of it is anchored
-// right, keeping the game's own margin from the edge; the rest stay centred.
+// (centred), the wind bar (right) and the weapon panel, which slides in from
+// the right. A HUD element that ends left of x 80 is anchored left and one
+// that starts at x 200 or right of it is anchored right, keeping the game's
+// own margin from the edge; the rest stay centred. An element that touches
+// (within 2 pixels) one anchored right in the frame before is anchored right
+// too: the weapon panel comes in anchored and stays so as it settles with its
+// left part past x 200 (it used to jump back to its 4:3 place there, STATUS.md
+// round 18). The team bars end 6 pixels short of the wind bar.
 // The command goes in the display list just before the element's own, and
 // the next draw-list entry (or the end of the walk) resets it.
 namespace {
@@ -153,6 +159,22 @@ namespace {
     bool hud_entry = false;
     bool anchored = false;
     gpr anchored_lib = 0;
+
+    struct Rect {
+        int32_t x0, y0, x1, y1;
+    };
+    // HUD elements anchored right in this frame and in the one before.
+    std::vector<Rect> right_rects, prev_right_rects;
+    constexpr int32_t kTouch = 2;
+
+    bool touches_right_group(const Rect& r) {
+        for (const Rect& o : prev_right_rects) {
+            if (r.x0 <= o.x1 + kTouch && o.x0 <= r.x1 + kTouch && r.y0 <= o.y1 + kTouch && o.y0 <= r.y1 + kTouch) {
+                return true;
+            }
+        }
+        return false;
+    }
 
     void write_align(uint8_t* rdram, gpr lib, uint16_t origin, int16_t offset) {
         gpr head = (gpr)MEM_W(kDlHead, lib);
@@ -174,15 +196,17 @@ namespace {
         }
     }
 
-    void hud_element(uint8_t* rdram, gpr lib, int32_t x, int32_t w) {
+    void hud_element(uint8_t* rdram, gpr lib, int32_t x, int32_t y, int32_t w, int32_t h) {
         if (!hud_entry) {
             return;
         }
+        const Rect r{ x, y, x + w, y + h };
         if (x + w <= 80) {
             write_align(rdram, lib, kOriginLeft, 0);
         }
-        else if (x >= 200) {
+        else if (x >= 200 || touches_right_group(r)) {
             write_align(rdram, lib, kOriginRight, kRightOriginShift);
+            right_rects.push_back(r);
         }
         else {
             return;
@@ -204,4 +228,6 @@ extern "C" void wa_hud_end(uint8_t* rdram, recomp_context* ctx) {
     (void)ctx;
     reset_anchor(rdram);
     hud_entry = false;
+    prev_right_rects.swap(right_rects);
+    right_rects.clear();
 }

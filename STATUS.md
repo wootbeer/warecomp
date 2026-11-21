@@ -3,6 +3,19 @@
 How each piece of the port was found and fixed, newest first. PROGRESS.md
 has the short version.
 
+## 2026-11-21, round 18: the weapon panel jumped back to its 4:3 place
+
+The owner's video: the weapon panel slid in from the right edge as it
+should, then jumped to where it would be in 4:3 when it settled. It is
+HUD elements (anchored right while they start at x 200 or more); settled,
+its left part starts left of 200, so those elements dropped back to
+centred. Now a HUD element that touches (within 2 pixels) one anchored right
+in the frame before is anchored right too: the panel comes in anchored and
+stays so, together. Right-anchored rects are kept per frame (the walk's end
+swaps them). The team bars end 6 pixels short of the wind bar, so they stay
+centred. The panel couldn't be opened here (it was the CPU's turn); checked
+by the owner.
+
 ## 2026-11-21, round 17: the Cheats tab (the game's own codes)
 
 Decoded the flags the secret team names set (round 16):
