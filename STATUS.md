@@ -3,6 +3,45 @@
 How each piece of the port was found and fixed, newest first. PROGRESS.md
 has the short version.
 
+## 2026-11-21, round 7: widescreen
+
+With RT64's Expand, only some backgrounds reached into the sides: the game
+draws its level in tiles from x = 0 rightwards, and RT64 showed the last
+tile's overhang past 320; nothing was drawn at negative x.
+
+How a match draws: the per-frame render (`game_800520C0`) has
+`game_8005FC70` walk a draw list of items in world coordinates. Each is
+projected by `game_800614CC` (subtract the camera at +4/+8/+0xC, scale by
+focal / (depth + focal) for parallax; it never culls), and the camera is
+the view's top-left corner (read at runtime: camera x 1410, items from
+-188 to past 1557). So the whole scene is submitted, off-screen parts
+included, and only the drawing library in the resident code (seven
+functions building S2DEX2 commands) culls and clips to fixed bounds:
+x in [0, 320], y in [0, 240].
+
+`src/game/widescreen.cpp` and wa.us.toml widen those bounds horizontally
+to [-128, 448] (`WA_WS_EXTRA`, fixed; enough for about 21.6:9, and RT64 clips
+what's past a narrower window's edge):
+
+| Function | Does | Changed |
+|---|---|---|
+| `func_8000733C` (blit wrapper) | cull | right 0x141 +128 (patch); left `x + w < 0` +128 (hook) |
+| `func_8000762C` (terrain strips) | cull, right clip per 32-px strip | right constants +128; left test +128 |
+| `func_800084EC` (sprites) | cull | right +128; left `x < -w` -128 |
+| `func_80008010` (blitter) | cull, clip both sides | right constants +128; left test; clip block replaced |
+| `func_80007C74` (background) | cull, clip both sides | right +128; clip block replaced |
+| `func_80009320` (background) | cull, clip both sides | right +128; clip block replaced |
+
+The replaced clip blocks keep the originals' logic with the edges at -128
+and 448, and their delay-slot side effects. The level now fills a 16:9
+window; worms by the old 4:3 border draw whole. The HUD stays in the middle
+4:3 area. The menus look as before.
+
+Not done yet: the HUD following the Graphics tab's HUD Ratio (RT64 rect
+alignment, as btgarecomp does). Unchecked: `func_80008D18` (a full-screen
+background, not used in a match so far), `func_80008F60`/`func_8000914C`
+(`sltiu 0x13F`) and `func_8000EC44`.
+
 ## 2026-11-21, round 6: the worms were invisible (RT64's S2DEX object rectangles)
 
 The owner could play a match, but the worms were invisible (name tags and

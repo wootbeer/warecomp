@@ -170,3 +170,119 @@ text = """
     wa_coro_resume(rdram, ctx);
     goto L_800AAC40;
 """
+
+# Widescreen (src/game/widescreen.cpp, STATUS.md round 7): the drawing
+# library's screen bounds widened from [0, 320] to [-128, 448]
+# (WA_WS_EXTRA = 128 in include/wa_recomp_hooks.h; keep these in step).
+# Right edges: the 0x141 / 0x140 constants, + 128.
+
+[[patches.instruction]]
+func = "func_8000733C"
+vram = 0x80007408
+value = 0x2A0201C1
+
+[[patches.instruction]]
+func = "func_8000762C"
+vram = 0x80007794
+value = 0x292201C1
+
+[[patches.instruction]]
+func = "func_8000762C"
+vram = 0x80007868
+value = 0x284201C1
+
+[[patches.instruction]]
+func = "func_8000762C"
+vram = 0x800079EC
+value = 0x288201C1
+
+[[patches.instruction]]
+func = "func_8000762C"
+vram = 0x800079FC
+value = 0x240201C0
+
+[[patches.instruction]]
+func = "func_80007C74"
+vram = 0x80007E34
+value = 0x2A4201C0
+
+[[patches.instruction]]
+func = "func_80008010"
+vram = 0x8000811C
+value = 0x2A2201C1
+
+[[patches.instruction]]
+func = "func_80008010"
+vram = 0x80008148
+value = 0x284201C1
+
+[[patches.instruction]]
+func = "func_80008010"
+vram = 0x80008154
+value = 0x240201C0
+
+[[patches.instruction]]
+func = "func_800084EC"
+vram = 0x80008528
+value = 0x2A4201C1
+
+[[patches.instruction]]
+func = "func_80009320"
+vram = 0x80009374
+value = 0x2A2201C1
+
+# Left edges: "x + width < 0" tests get + 128 ($v0 = x + width) ...
+[[patches.hook]]
+func = "func_8000733C"
+before_vram = 0x80007404
+text = """
+    ctx->r2 = ADD32(ctx->r2, WA_WS_EXTRA);
+"""
+
+[[patches.hook]]
+func = "func_8000762C"
+before_vram = 0x80007774
+text = """
+    ctx->r2 = ADD32(ctx->r2, WA_WS_EXTRA);
+"""
+
+# ... and "x < -width" tests get - 128 ($v0 = -width).
+[[patches.hook]]
+func = "func_800084EC"
+before_vram = 0x80008548
+text = """
+    ctx->r2 = ADD32(ctx->r2, -WA_WS_EXTRA);
+"""
+
+[[patches.hook]]
+func = "func_80008010"
+before_vram = 0x80008130
+text = """
+    ctx->r2 = ADD32(ctx->r2, -WA_WS_EXTRA);
+"""
+
+# The blocks that clip to the left and right edges, replaced (the original
+# code after each goto doesn't run).
+[[patches.hook]]
+func = "func_80007C74"
+before_vram = 0x80007E84
+text = """
+    wa_ws_clip_7c74(rdram, ctx);
+    goto L_80007ED8;
+"""
+
+[[patches.hook]]
+func = "func_80008010"
+before_vram = 0x80008284
+text = """
+    wa_ws_clip_8010(rdram, ctx);
+    goto L_800082DC;
+"""
+
+[[patches.hook]]
+func = "func_80009320"
+before_vram = 0x8000941C
+text = """
+    wa_ws_clip_9320(rdram, ctx);
+    goto L_80009478;
+"""
