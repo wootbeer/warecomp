@@ -38,8 +38,24 @@ in an array at +0x1BE of the settings object (*0x8008EDAC + 4, set by
 front_80083034, read by front_80083020); "3xmr8f56" cycles flag 0 through
 0-2; the French ones (Ctropdur, Ctfacile, Ctrohard, Qqpompes, Jai peur,
 Jsuigran, F5x3e964) raise or lower fields of the team being made. Only
-"Simpsons" is documented anywhere; what each flag does is still to be found
-(flag 5 adds a sixth entry to a five-item menu list).
+"Simpsons" is documented anywhere.
+
+What they do, from the code (front_8005F05C's cases):
+- Team progress, on the team being made: byte 7 is its missions (the
+  GameShark code writes 0x1B), byte 9 its training levels (0x0B).
+  F5x3e964 sets both to their maximum (0x1C, 0x0B); Ctropdur / Ctfacile one
+  mission more / less; Ctrohard / Qqpompes one training level more / less.
+  Jai peur / Jsuigran: byte 10 (0-40, likely the deathmatch rank) +2 / -2.
+- Secret teams: 01091975 makes the team "Totophe" (worms Sandy, Seb,
+  Franck, Tony, Celine, ...: the French developers); 12021998, Simpsons,
+  Caglisse and Beru are the same kind of case.
+- Flags: flags 3-0x16 (Xxxxxxxx, P51g1d2d, Hpf6vi9d ... O0o o0og) are set
+  but never read in this build. Read: flag 5 (23gu5sbr: teams of type 7
+  aren't docked one from the low nibble of byte 3, front_80076DB4; a
+  five-item list gets a sixth, front_8006B9DC), flag 0x17 (Toupeter,
+  front_8007C2B8), flag 0x18 (no name sets it; front_80051210/518F4), flag 0
+  (3xmr8f56 cycles it 0-2; front_80082ED4). Their effects are still to be
+  found. The flag array is at 0x80041B76 (*0x8008EDAC + 4, + 0x1BE).
 
 ## 2026-11-21, round 15: HUD anchoring, ultrawide
 
