@@ -3,6 +3,19 @@
 How each piece of the port was found and fixed, newest first. PROGRESS.md
 has the short version.
 
+## 2026-11-21, round 20: matrix sprites turn
+
+The owner: the air strike target now shows but doesn't turn, and the
+missiles weren't seen (only their trails). Matrix sprites (0030) are now
+drawn turned: the sprite's four corners go through the matrix (x' = A x +
+B y + X, y' = C x + D y + Y; the game centres each sprite on its origin and
+puts the centre in X, Y) and RDP::drawTris draws two textured triangles
+(texcoords in texels, as rects use; the sampled range recorded with
+updateCallTexcoords). Checked with a bazooka shot (Z fires; R held opens the
+weapon panel; A jumps): the frame has the DC17 + 06 pair and the shell
+shows, tilted along its path. The air strike itself wasn't tested here (5
+turns' delay in the normal scheme; Pow Pow has none).
+
 ## 2026-11-21, round 19: the air strike's cursor didn't show
 
 The drawing library's func_8000762C has a path for rotating sprites: it
