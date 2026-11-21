@@ -1,0 +1,44 @@
+A background's last line doesn't show the image past the frame when
+upscaled (warecomp STATUS.md rounds 12 and 13).
+
+S2DEX bg1Cyc draws a background in slices, loading one line more than it
+draws when bilerp is on. The RDP samples each pixel at its top, so that
+extra line only ever gets a zero weight; drawn at a higher resolution, the
+lower part of each output line samples further down. Inside the frame the
+line below is the frame's own next line, but on the frame's last line it is
+the image past the frame: Worms Armageddon's level showed a sliver of the
+level below the screen (or the level's top border, where the image wraps)
+along the bottom edge of the window. In the frame's last slice, the TMEM
+line after the last line it shows now gets a copy of that line.
+
+(Clamping T at that line instead, the first version, lost the last line of
+small frames such as the game's name tags in RT64's sampling.)
+
+--- a/src/gbi/rt64_gbi_s2dex.cpp
++++ b/src/gbi/rt64_gbi_s2dex.cpp
+@@ -391,8 +391,25 @@
+                         imageSliceH = std::min(imageSliceH, imageSliceLines);
+                     }
+ 
++                    const uint32_t sliceImagePtr = imagePtr;
+                     bg1CycTMEMLoad(*rdp, scaleBg, imageAddress, imagePtr, imageRemain, imageSrcWsize, imagePtrX0, tmemSrcLines, tmemSliceWmax, imageSliceH, usesBilerp, flagSplit);
+ 
++                    // The frame's last slice: the TMEM line after the last image line it shows gets a copy of
++                    // that line. The RDP samples each pixel at its top, so the line after only ever gets a zero
++                    // weight, but drawn at a higher resolution the bottom of the frame's last line samples
++                    // further down and showed the image past the frame (the next line of the image, or its top
++                    // where it wraps). With the copy it samples the same line again.
++                    if ((frameRemain <= 0) && (scaleBg.imageSiz != G_IM_SIZ_32b)) {
++                        const int32_t lastLineT = (int32_t(imageT) + (((frameSliceH - 1) * int32_t(scaleH)) >> 5)) >> 5;
++                        const int32_t copyLine = lastLineT + 1;
++                        if ((lastLineT >= 0) && ((copyLine + 1) * int32_t(tmemSliceWmax) <= tmemSize)) {
++                            const int32_t sliceStartLine = int32_t(sliceImagePtr - imageAddress - imagePtrX0) / int32_t(imageSrcWsize);
++                            const int32_t lastImageLine = (((sliceStartLine + lastLineT) % int32_t(tmemSrcLines)) + int32_t(tmemSrcLines)) % int32_t(tmemSrcLines);
++                            const uint32_t lastLinePtr = imageAddress + uint32_t(lastImageLine) * imageSrcWsize + imagePtrX0;
++                            bg1CycTMEMSetAndLoadTile(*rdp, scaleBg, lastLinePtr, imageSrcWsize, 1, tmemSliceWmax, int16_t(copyLine * tmemSliceWmax), tmemSliceWmax);
++                        }
++                    }
++
+                     int16_t framePtrY1 = framePtrY0 + frameSliceH;
+                     rdp->drawTexRect(frameX0, framePtrY0 << 2, frameX1, framePtrY1 << 2, G_TX_RENDERTILE, imageS, imageT, scaleW, scaleH, false);
+                     framePtrY0 = framePtrY1;

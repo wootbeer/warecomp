@@ -3,6 +3,20 @@
 How each piece of the port was found and fixed, newest first. PROGRESS.md
 has the short version.
 
+## 2026-11-21, round 13: name tags lost their bottom border (0029 reworked)
+
+Round 12's clamp took the bottom row off every small background: the name
+and health tags, and the menus' frames (the owner's report). Logged in
+bg1Cyc, the clamp line was right (line 8 of a 9-line tag frame), yet RT64
+drew line 7 there; clamping one line lower brought back the bottom-edge
+sliver. Rather than depend on how RT64 samples a clamped tile, 0029 now
+leaves sampling alone and changes the data: in a frame's last slice, the
+TMEM line after the last line shown gets a copy of that line (one extra
+1-line load from the image), so whatever the lower part of the last line
+samples is that same line. Three new levels: tag borders complete, the
+bottom edge clean (0-21 of 1140 columns differ, all at sprite or landscape
+edges), the landscape still in step.
+
 ## 2026-11-21, round 12: a line of wrong pixels along the bottom edge
 
 The owner saw, sometimes, a line of stray pixels along the bottom of the
@@ -22,7 +36,7 @@ last line it's the image past the frame (the next line of the level, or its
 top where the image wraps).
 
 `lib-patches/rt64/0029`: the last slice of a background clamps T at the
-last image line the frame shows. New captures on three levels: 0 columns
+last image line the frame shows (reworked in round 13). New captures on three levels: 0 columns
 differ, and the landscape still lines up (round 10's check).
 
 ## 2026-11-21, round 11: wave rows cut on the left, the landscape mirrored on the right
