@@ -3,6 +3,31 @@
 How each piece of the port was found and fixed, newest first. PROGRESS.md
 has the short version.
 
+## 2026-11-21, round 8: widescreen, the old 4:3 edges in RT64
+
+The owner's widescreen run: terrain and backgrounds filled the window, but
+name tags, sprites crossing the edge and the water were cut at the old 4:3
+edges. A frame's display list (dumped while a tag crossed the edge) was
+right: boxes from -128 to 448, none cut at 0 or 320. The cut was RT64's:
+
+- With Expand, a scissor without extended origins is scaled about the
+  centre, so the game's full-screen scissor (0-320, set once per frame by
+  `func_800095AC`) became the middle 4:3 area and clipped every draw at
+  render time.
+- S2DEX `bg1Cyc` also cuts each background frame to the scissor, as the
+  microcode does (the name tags are BG_1CYC objects).
+
+Anchoring the scissor to the window edges (gEXSetScissor-style origins)
+would have tied the playfield to RT64's *extended* aspect, which is the
+frontend's HUD Ratio setting; so instead `lib-patches/rt64/0025`: at render
+time a draw whose scissor spans the whole colour image width and has no
+origins gets the whole wide target horizontally, and bg1Cyc doesn't cut
+such a scissor's frame horizontally. Smaller scissors and anchored ones are
+unchanged. Tags, worms and crates now cross the old edges on both sides.
+
+Left: the wave strip along the bottom stops short of the left window edge
+(about game x -30) in one frame checked; not looked into yet.
+
 ## 2026-11-21, round 7: widescreen
 
 With RT64's Expand, only some backgrounds reached into the sides: the game
