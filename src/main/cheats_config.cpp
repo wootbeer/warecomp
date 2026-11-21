@@ -17,6 +17,13 @@ namespace {
     };
 
     const Heading headings[] = {
+        // Heading notes are plain text (no <b>).
+        { wa::cheats::Section::Stock, "The Game's Codes",
+          "The N64 version's codes are secret team names, typed when creating a team. These do the same here. "
+          "Others to type in the game: 01091975, 12021998, Simpsons, Caglisse and "
+          "Beru make secret teams (01091975: the developers' team, Totophe); for the team being made, "
+          "Ctropdur / Ctfacile open one mission more / less, Ctrohard / Qqpompes one "
+          "training level more / less, and Jai peur / Jsuigran move its rank up / down." },
         { wa::cheats::Section::GameShark, "GameShark Codes",
           "Codes players made for the GameShark. They're not part of the game, so expect glitches, "
           "and turn them off if something goes wrong." },
@@ -50,7 +57,7 @@ void wa::cheats::add_cheats_tabs() {
         if (i == 0 || all[i - 1].section != cheat.section) {
             for (const Heading& heading : headings) {
                 if (heading.section == cheat.section) {
-                    recompui::config::add_option_heading(hacks_id, cheat.id, heading.title, heading.note);
+                    recompui::config::add_option_heading(cheat.section == Section::Stock ? cheats_id : hacks_id, cheat.id, heading.title, heading.note);
                 }
             }
         }

@@ -3,6 +3,35 @@
 How each piece of the port was found and fixed, newest first. PROGRESS.md
 has the short version.
 
+## 2026-11-21, round 17: the Cheats tab (the game's own codes)
+
+Decoded the flags the secret team names set (round 16):
+- **Flag 0 (3xmr8f56)**: front_80082ED4 picks the game's scheme
+  (front_800832F0 loads PAK_*_SCH / _WSC 1-17: Beginner, Intermediate,
+  Advanced, Mission, Training, Artillery, Classic Worms 2, Armageddon,
+  Darkside, Retro, Shopping Mall, Strategy, Sudden Sinking, Tournament,
+  World War 3, Pow Pow). With flag 0 at 1 every game but the missions gets
+  Pow Pow (0x11), at 2 World War 3 (0x10): schemes the menus never offer.
+  Checked: a Quickstart asks for scheme 2 and loads 0x11 with it on.
+- **Flag 0x17 (Toupeter)**: front_8007C2B8 asks for Intermediate (2) instead
+  of Tournament (0xF). Quickstart doesn't use it (it asks for 2 through
+  front_80066460); Deathmatch, the ranked mode, is the likely one (it needs a
+  created team, so not checked).
+- **Flag 5 (23gu5sbr)**: the Create Team screen's five-choice list at x 170
+  (the "Flag" selector's position) gets a sixth, and teams of type 7 aren't
+  docked one from byte 3's low nibble (front_80076DB4). Not seen in play
+  (the team screen's name entry wasn't driven from here).
+- **Flag 0x18**: no name sets it (a random 0-99 instead of 0x60 in
+  front_80051210); left out.
+- Flags 3-0x16: never read; those 18 names do nothing in this build.
+
+The Cheats tab (src/game/cheats.cpp, stock entries): Hidden Scheme (off /
+Pow Pow / World War 3), Intermediate Scheme Instead of Tournament, Extra
+Team Choice, and All Missions and Training (F5x3e964's values, 0x1C missions
+/ 0x0B training, on all six teams). The flags are at 0x80041B76 (static);
+kept set while on, cleared once when turned off. The heading lists the codes
+that only make sense typed (the secret teams, the one-step progress codes).
+
 ## 2026-11-21, round 16: Hide Level Border, the Hacks tab
 
 **Hide Level Border** (Graphics tab). The striped border around a level is

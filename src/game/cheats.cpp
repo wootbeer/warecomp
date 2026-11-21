@@ -1,6 +1,13 @@
 // What the Cheats and Hacks tabs do in the game (include/wa_cheats.h). From
 // btgarecomp's src/game/cheats.cpp, without its netplay and its hooks.
 //
+// Stock codes are the game's own: the N64 version has no cheat menu, but a new
+// team's name is checked against 34 secret names (front_8005EC64), and some
+// of them switch things on (STATUS.md round 16-17). The toggles do what the
+// name does: most set a flag in the settings' flag array (only the front end
+// reads it), kept set while on and cleared once when turned off, like the
+// game's own flag (typing the name in the game still works).
+//
 // GameShark codes are the community's codes for this ROM. They write to the
 // game's memory, applied once a frame here as the cheat device did (codes 80,
 // 81, D0-D3 and 50).
@@ -25,6 +32,8 @@ namespace {
         std::vector<std::vector<std::string>> codes = {};
         // Put the original bytes back when turned off.
         bool restore = false;
+        // Run once when turned off (the stock flags: cleared).
+        std::vector<std::string> off_codes = {};
     };
 
     std::string hex(uint32_t value, int digits) {
@@ -71,8 +80,51 @@ namespace {
         return e;
     }
 
+    // The settings' flag array (*0x8008EDAC + 4, + 0x1BE): a static block in
+    // the resident segment's data.
+    constexpr uint32_t kFlags = 0x80041B76;
+
+    std::string flag_code(int flag, int value) {
+        return hex(0x80000000u | ((kFlags + flag) & 0xFFFFFF), 8);
+    }
+
+    Entry stock_flag(const char* id, const char* name, const char* team_name, const char* text, int flag) {
+        std::string description = std::string(text) + "<br/><br/>The game's code: name a new team <b>" + team_name + "</b>.";
+        return { { id, name, description, Section::Stock, {} }, { { flag_code(flag, 1), "0001" } }, false, { flag_code(flag, 0), "0000" } };
+    }
+
     std::vector<Entry> make_entries() {
         std::vector<Entry> e;
+
+        // The game's own codes (front_8005F05C's cases).
+        {
+            Entry scheme{ { "hidden_scheme", "Hidden Scheme",
+                "Every game except the missions is played with one of two schemes the menus don't offer: "
+                "<b>Pow Pow</b> or <b>World War 3</b> (their weapons and options).<br/><br/>"
+                "The game's code: name a new team <b>3xmr8f56</b> (once for Pow Pow, twice for World War 3, a third time "
+                "to turn it off).",
+                Section::Stock, { { "Off", "Off" }, { "PowPow", "Pow Pow" }, { "WorldWar3", "World War 3" } } },
+                { { flag_code(0, 1), "0001" }, { flag_code(0, 2), "0002" } }, false, { flag_code(0, 0), "0000" } };
+            e.push_back(scheme);
+        }
+        e.push_back(stock_flag("full_arsenal", "Intermediate Scheme Instead of Tournament", "Toupeter",
+            "The mode that starts with the Tournament scheme (few weapons; Deathmatch, as far as the code shows) "
+            "starts with the Intermediate scheme instead.", 0x17));
+        e.push_back(stock_flag("extra_choice", "Extra Team Choice", "23gu5sbr",
+            "Adds a sixth choice to a five-choice list on the Create Team screen, and stops teams of one kind (type 7) "
+            "losing one from that setting. Found in the code; not yet seen in play.", 5));
+        {
+            std::vector<std::string> codes;
+            for (int k = 0; k < 6; k++) {
+                codes.push_back(hex(0x800C5BD7 + 0x100 * k, 8)); codes.push_back("001C");
+                codes.push_back(hex(0x800C5BD9 + 0x100 * k, 8)); codes.push_back("000B");
+            }
+            e.push_back({ { "all_missions_training", "All Missions and Training",
+                "Every mission and training level is open for every team (the game's own values). Saved with the teams, "
+                "so it stays after turning this off.<br/><br/>"
+                "The game's code: name a new team <b>F5x3e964</b> (for that team).",
+                Section::Stock, {} }, { codes }, false });
+        }
 
         // GameShark (US ROM). Left out: the button activators (D0044984,
         // D0044985, D1044984), which only make another code wait for a
@@ -232,6 +284,9 @@ extern "C" void wa_cheats_frame(uint8_t* rdram) {
         uint32_t value = wanted()[i].load();
         if (value != state.value) {
             restore_bytes(rdram, state);
+            if (value == 0 && !e.off_codes.empty()) {
+                run_codes(rdram, state, false, parse(e.off_codes));
+            }
             state.value = value;
         }
         if (value == 0) {
