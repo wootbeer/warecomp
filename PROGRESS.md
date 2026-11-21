@@ -17,7 +17,7 @@ and leave the game's own behaviour, look and balance alone.
   libultra is named from signatures; the overlays share addresses and are
   told apart by section.
 - **Widescreen**: the level fills wide windows, with the landscape and
-  sprites in step (STATUS.md rounds 7, 8 and 10).
+  sprites in step (STATUS.md rounds 7, 8, 10 and 11).
 - **Graphics**: the game draws with S2DEX2 (2D sprites); RT64 needed
   object rectangles added (`lib-patches/rt64/0024`, STATUS.md round 6).
 - **Audio microcode**: n_aspMain, the same build btgarecomp uses,

@@ -3,6 +3,35 @@
 How each piece of the port was found and fixed, newest first. PROGRESS.md
 has the short version.
 
+## 2026-11-21, round 11: wave rows cut on the left, the landscape mirrored on the right
+
+The owner's next widescreen run: the top rows of the water (sand waves on
+that level) stopped short of the window's left edge, and on the right the
+level was mirrored about the old screen edge.
+
+**Water and other repeating images.** Each wave row is one draw-list entry
+(type 4, drawn by `func_8000733C`); for an image that repeats horizontally
+it wraps the first copy's x into (-width, 0] (0x800074D0-0x800074F8) and
+`func_80007C74` draws copies from there to the right edge (448 since
+round 7). Starting in (-128, 0] left a gap of up to one copy on the
+left. A hook at 0x80007500, where both wrapping paths meet, steps the start
+back one copy at a time until it's at or past -128 (the frame list then
+shows each row starting at -128, its first copy cut by the round-7 clip).
+
+**Mirroring.** Measured on a frame-synchronous capture (round 10's
+method): past game x 320, the landscape on screen was the expected image
+mirrored about x = 319.5, within a few levels of error. The game sends one
+BG_1CYC for the whole landscape, so it was RT64's: `RDP::drawRect` records
+the range of texels a rect samples, cut to the scissor, and the texture
+cache decodes only that range. The game's scissor is 0-320, so the decoded
+texture stopped at the texel under x = 320, while 0025 draws on past it;
+the sampler (the BG render tile is set to mirror) mirrored beyond the last
+decoded texel. `lib-patches/rt64/0028`: for a scissor spanning the whole
+colour image without origins (the case 0025 widens), the sampled range
+isn't cut horizontally. Checked on three new levels: past x 320 the
+landscape matches the image directly (average error 3-11 per pixel), and
+no mirror fits.
+
 ## 2026-11-21, round 10: floating worms in widescreen
 
 The owner saw some worms floating over the ground (or sunk into it) in

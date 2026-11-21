@@ -246,6 +246,19 @@ text = """
     ctx->r2 = ADD32(ctx->r2, WA_WS_EXTRA);
 """
 
+# A horizontally repeating image (water waves, parallax layers) starts its
+# first copy in (-width, 0], enough for a screen from 0: step it back past
+# the wider left edge. 0x80007500 is where both wrapping paths meet; the copy's
+# width is at sp + 0x40.
+[[patches.hook]]
+func = "func_8000733C"
+before_vram = 0x80007500
+text = """
+    while ((int32_t)ctx->r16 > -WA_WS_EXTRA) {
+        ctx->r16 = SUB32(ctx->r16, MEM_W(0X40, ctx->r29));
+    }
+"""
+
 # ... and "x < -width" tests get - 128 ($v0 = -width).
 [[patches.hook]]
 func = "func_800084EC"
