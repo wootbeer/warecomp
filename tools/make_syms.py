@@ -49,6 +49,11 @@ NAMES = {
     # __osSpDeviceBusy, which is the one at 0x80034100 (SP_STATUS 0xA4040010)
     0x8002DC70: "__osSiDeviceBusy",
     0x80034100: "__osSpDeviceBusy",
+    # the same as osViGetCurrentFramebuffer (0x80034240) but reading
+    # __osViNext (0x80036C84): osViGetNextFramebuffer. Unnamed, it read
+    # libultra's VI state, which the runtime doesn't keep, and the scheduler
+    # held the third frame forever waiting for its buffer (round 3)
+    0x80034280: "osViGetNextFramebuffer",
 }
 
 SMALL_OK = {"osAiGetStatus", "osSpTaskYield", "__osGetCause", "__osSetSR", "osScGetCmdQ",

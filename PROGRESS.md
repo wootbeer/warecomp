@@ -21,14 +21,12 @@ and leave the game's own behaviour, look and balance alone.
   controls, mouse stick, local multiplayer, screen filters, bloom,
   frame generation, mods tab, Add to Steam, crash reports, packaging.
 - **Builds on Linux** (Ubuntu 24.04, clang 18).
-- **Runs without crashing** (Linux, software Vulkan): boots, loads the
-  frontend overlay, runs its threads and RSP tasks (STATUS.md round 2).
-  The screen is still black there.
+- **Boots to the language select screen**, drawn by RT64 (STATUS.md
+  rounds 2 and 3).
 
 ## Next
 
-- A run on a real GPU (Windows), and getting to the title screen and the
-  menus.
+- Past the language screen: the menus, then a match (the second overlay).
 - Saves: the cartridge EEPROM (set to 4 Kbit; confirm in game).
 - Widescreen: see what the game's HUD and menus need.
 - Steam Deck: the Linux build (`tools/package-linux.sh`) once it runs.

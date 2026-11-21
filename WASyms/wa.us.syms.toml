@@ -1002,7 +1002,7 @@ functions = [
     { name = "osSpTaskYielded", vram = 0x800341E0, size = 0x50 },
     { name = "__osSpGetStatus", vram = 0x80034230, size = 0x10 },
     { name = "osViGetCurrentFramebuffer", vram = 0x80034240, size = 0x3C },
-    { name = "func_80034280", vram = 0x80034280, size = 0x3C },
+    { name = "osViGetNextFramebuffer", vram = 0x80034280, size = 0x3C },
     { name = "osViSetEvent", vram = 0x800342C0, size = 0x5C },
     { name = "osViSetMode", vram = 0x80034320, size = 0x50 },
     { name = "osViSwapBuffer", vram = 0x80034370, size = 0x48 },

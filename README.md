@@ -12,8 +12,8 @@ sharing its launcher, menus and graphics features.
 Unofficial, and not affiliated with the rights holders. **No game data is
 included.** You need your own dump of the game to build or play this.
 
-**Status: early work, not playable yet.** The whole game's code recompiles
-and the port builds on Linux; it has not been run yet. See
+**Status: early work, not playable yet.** The game boots to its language
+select screen; menus and matches are untested. See
 [PROGRESS.md](PROGRESS.md).
 
 ## Planned features

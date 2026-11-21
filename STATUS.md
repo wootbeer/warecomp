@@ -3,6 +3,25 @@
 How each piece of the port was found and fixed, newest first. PROGRESS.md
 has the short version.
 
+## 2026-11-21, round 3: the language screen draws
+
+The owner's Windows run (real GPU) was black too, so it wasn't llvmpipe.
+After two frames the game stopped submitting graphics tasks (2 against
+2083 audio tasks in 40 s). The main thread waited in `func_80032C78` for
+frame buffer 0's busy flag, which the scheduler client clears on that
+frame's "done" message, and that frame was never run: libultra's scheduler
+(`OSSched` at 0x800483D0 in this build: interrupt queue +0x40, client list
++0x260, audio/graphics lists +0x264/+0x268, current RSP/RDP task
++0x274/+0x278) had the RSP and RDP idle and a frame waiting on its list.
+It only starts a swap-buffer frame once its buffer is neither the current
+nor the next VI buffer, and `func_80034280`, which it calls for the next
+one, was unnamed: it is `osViGetNextFramebuffer` (the same as
+`osViGetCurrentFramebuffer` beside it, reading `__osViNext` at 0x80036C84
+instead of `__osViCurr`). Run as game code it read libultra's VI state,
+which the runtime doesn't keep. Named, the game reaches its language
+select screen, drawn by RT64. Every other function using those VI
+contexts was already named.
+
 ## 2026-11-20, round 2: first runs (Linux, software Vulkan)
 
 Run headless on this machine (no GPU): Xvfb and Mesa's llvmpipe Vulkan
