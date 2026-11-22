@@ -28,7 +28,9 @@ extracted into a fresh folder, an empty home folder, `SteamDeck=1`, and a 1280x8
   itself, but a Linux binary has no icon, so Steam would show a blank one. The package
   now carries `icons/app.png`, and the shortcut uses it when it's there
   (`icon_path`, `src/main/steam_shortcut.cpp`). Tested: the icon field points to it.
-  Steam artwork (cover, banner) is still empty until the owner chooses it.
+  Steam artwork: the owner chose a square cover and a wide image on SteamGridDB (their
+  full-size `/grid/` files); Add to Steam downloads them and writes the portrait cover,
+  wide capsule and hero banner (tested: all three written).
 - **Libraries:** the binary needs glibc 2.38 (symbol versions checked). SteamOS 3.7 is
   on a newer Arch base, reportedly glibc 2.41 (not confirmed). SDL2, GTK 3 (the
   ROM file picker), FreeType and Vulkan come from the system. SteamOS has them.
