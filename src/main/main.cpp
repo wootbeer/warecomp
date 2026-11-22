@@ -56,6 +56,7 @@
 
 #include "wa_config.h"
 #include "wa_cheats.h"
+#include "wa_command_line.h"
 #include "wa_steam.h"
 #include "wa_android.h"
 
@@ -622,6 +623,8 @@ int main(int argc, char** argv) {
     // app's storage as the working directory (src/android/android_startup.cpp).
     wa::android::startup();
 #endif
+    // Started from elsewhere (a shortcut, Steam, a terminal): work from the game's folder.
+    wa::portable::use_game_folder();
     std::set_terminate(report_unhandled_exception_and_abort);
 
     recomp::Version project_version{};
@@ -648,8 +651,17 @@ int main(int argc, char** argv) {
     // inside the font file: recompui's generated base stylesheet sets
     // `font-family` to it, and RmlUi draws no text for a family it never
     // loaded (btgarecomp round 86).
+    std::error_code assets_ec;
+    if (!std::filesystem::is_directory(recompui::file::get_asset_path(""), assets_ec)) {
+        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Worms Armageddon Recompiled",
+            "The assets folder wasn't found. Keep it next to the game's program file.", nullptr);
+        return EXIT_FAILURE;
+    }
+
     recompui::register_primary_font("Exo2.ttf", "Exo 2");
 
+    // Portable by default for a new install (src/main/portable.cpp).
+    wa::portable::choose_default();
     recomp::register_config_path(recompui::file::get_app_folder_path());
 
     for (const auto& game : supported_games) {
@@ -677,6 +689,14 @@ int main(int argc, char** argv) {
     recompui::config::create_mods_tab();
     recompui::config::finalize();
     wa::init_mouse_stick();
+
+    // Settings from the command line, --rom and --game's short name (src/main/command_line.cpp).
+    std::vector<std::string> runtime_args = wa::command_line::process(argc, argv);
+    std::vector<char*> runtime_argv;
+    for (std::string& arg : runtime_args) {
+        runtime_argv.push_back(arg.data());
+    }
+    runtime_argv.push_back(nullptr);
 
     // Read from the just-loaded config; takes effect on the next launch if
     // changed in the menu.
@@ -731,8 +751,8 @@ int main(int argc, char** argv) {
     recompui::register_launcher_update_callback(launcher_update);
 
     recomp::start({
-        .argc = argc,
-        .argv = argv,
+        .argc = (int)runtime_args.size(),
+        .argv = runtime_argv.data(),
         .project_version = project_version,
         .window_handle = {}, // created by gfx_callbacks.create_window
         .rsp_callbacks = rsp_callbacks,

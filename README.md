@@ -35,7 +35,28 @@ SHA-1 (as dumped, byte-swapped `.n64`):
 The game also accepts `.z64` and `.v64` dumps of the same release.
 Place it in an accessible folder on your device.
 
-Add a blank portable.txt in the application's folder to make portable if you want to save settings locally.
+Settings, saves and mods are kept in the game's own folder (it's portable):
+a new install puts a `portable.txt` there on first start. Delete it to keep
+them in your user folder instead (`%LOCALAPPDATA%\warecomp` on Windows,
+`~/.config/warecomp` on Linux). An install that already uses the user folder
+keeps using it; add a `portable.txt` to switch.
+
+## Command line
+
+| Option | What it does |
+|---|---|
+| `--game wa` | Start the game straight away (the ROM must have been loaded before). |
+| `--rom <file>` | Load that ROM, as **Load ROM** does, and start it. |
+| `--set <tab.setting=value>` | Change a setting and save it, as the menu does. Repeat for more. The tab can be left out when only one tab has the setting. |
+| `--fullscreen`, `--windowed` | The window mode. |
+| `--list-settings` | List every setting, its values and its current value. |
+| `--help` | List the options. |
+
+For example, as Steam launch options:
+`--game wa --fullscreen --set graphics.msaa_option=none --set hide_level_border=on`.
+Values can be written as the menu shows them (`--set graphics.rr_option=Original`).
+The Cheats and Hacks tabs can be set the same way. On Windows, run it from a
+command prompt to see `--list-settings` and `--help`.
 
 ## Steam Deck
 Use the Linux build (`WormsArmageddonRecompiled-<version>-linux-x86_64.tar.gz`).

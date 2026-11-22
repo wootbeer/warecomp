@@ -3,6 +3,35 @@
 How each piece of the port was found and fixed, newest first. PROGRESS.md
 has the short version.
 
+## 2026-11-22, round 28: portable by default; command line options
+
+Both from snprecomp (`src/main/portable.cpp`, `src/main/command_line.cpp`,
+`include/wa_command_line.h`), as the owner asked.
+
+- **Portable by default:** a new desktop install (no `portable.txt`, and no settings
+  folder in the user's folders yet) writes `portable.txt` on first start. Settings,
+  saves, mods and logs then stay in the game's folder. An existing install keeps
+  its user folder. The game also changes to its own folder when started from
+  elsewhere (a shortcut, Steam, a terminal), so `assets/` and `portable.txt` are found;
+  without `assets/` it says so and exits. Not on Android (its app folder is fixed).
+- **Command line:** `--rom <file>` (loads as Load ROM does, then starts),
+  `--game wa`, `--set tab.setting=value` (saved, as the menu does; the tab can be left
+  out when the name is on one tab only; values as keys or as the menu shows them),
+  `--fullscreen` / `--windowed`, `--list-settings`, `--help`. Tabs: general, graphics,
+  sound, cheats, hacks (and touch_controls on Android). Bad options are listed in a
+  message box and on stderr; the rest still apply.
+- **A difference from snprecomp:** the runtime's `--game` looks a game up by its short
+  (mod) ID, `wa`. snprecomp's code passed the full ID (`wa.n64.us` here), which the
+  runtime didn't find, so the game stayed on the launcher. `--rom` and `--game` now
+  pass the short ID, and the full one is mapped to it.
+
+**Tested** (sandbox, the Linux package extracted fresh, started from `/` with an empty
+home folder): `portable.txt` and every settings file were written in the game's folder
+and none in `~/.config`; `--help` and `--list-settings` print; `--rom <the z64> --fullscreen
+--set hide_level_border=on --set graphics.msaa_option=none` stored the ROM, saved the
+three settings, and went straight into the game; `--game wa.n64.us` went straight in
+too; `--rom /etc/hostname --set nonsense=1` reported both and kept to the launcher.
+
 ## 2026-11-22, round 27: Steam Deck readiness
 
 The Steam Deck uses the Linux package (`tools/package-linux.sh`). Not released and not
