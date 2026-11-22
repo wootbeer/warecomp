@@ -36,8 +36,8 @@ and leave the game's own behaviour, look and balance alone.
 
 - Play testing: whole matches, other modes.
 - Steam Deck: the Linux build (`tools/package-linux.sh`) once it runs.
-- Android: builds (android/README.md, PLAN.md); first run on a device next, then touch
-  controls.
+- Android: plays on the owner's device with a controller (android/README.md, PLAN.md);
+  touch controls next.
 
 ## Not planned yet
 

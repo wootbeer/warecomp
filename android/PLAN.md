@@ -1,8 +1,7 @@
 # Android port: plan
 
-Status (2026-11-22): the Android project is in place and `libmain.so` builds for arm64 with
-the NDK (checked in the sandbox); not yet run on a device. Next: the owner runs it from Android
-Studio (README.md), then touch controls.
+Status (2026-11-22): builds from Android Studio and plays on the owner's device (first run,
+controller). Next: touch controls.
 
 ## Decisions (agreed with the project owner)
 
@@ -55,6 +54,5 @@ without the touch overlay), `LogFiles`, `LogProvider`, `ShareLogActivity`.
 
 ## Next
 
-1. First run on the owner's device (logs: `adb logcat -s WA`, or Share log).
-2. Touch controls (snprecomp's, with Worms' own layout: move, jump, fire with power, aim,
+1. Touch controls (snprecomp's, with Worms' own layout: move, jump, fire with power, aim,
    weapon panel).
