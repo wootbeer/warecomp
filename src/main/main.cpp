@@ -395,7 +395,15 @@ static void set_frequency(uint32_t frequency) {
 // The game has no Controller Pak or Rumble Pak code (it saves to the
 // cartridge's EEPROM), so no pak is reported.
 static bool get_input(int controller_num, uint16_t* buttons, float* x, float* y) {
-    return wa::get_n64_input_with_mouse(controller_num, buttons, x, y);
+    const bool got = wa::get_n64_input_with_mouse(controller_num, buttons, x, y);
+#if defined(__ANDROID__)
+    // The on-screen controller is player 1's, alongside a real one.
+    if ((controller_num == 0) && !recompinput::game_input_disabled()) {
+        wa::android::add_touch_input(buttons, x, y);
+        return true;
+    }
+#endif
+    return got;
 }
 
 static ultramodern::input::connected_device_info_t get_connected_device_info(int controller_num) {
@@ -661,6 +669,9 @@ int main(int argc, char** argv) {
     wa::config::add_general_options(recompui::config::create_general_tab(general_tab_options));
     wa::config::add_graphics_options(recompui::config::create_graphics_tab());
     recompui::config::create_controls_tab();
+#if defined(__ANDROID__)
+    wa::config::add_touch_options(recompui::config::create_config_tab("Touch", "touch_controls", false));
+#endif
     recompui::config::create_sound_tab();
     wa::cheats::add_cheats_tabs();
     recompui::config::create_mods_tab();

@@ -22,6 +22,11 @@ namespace wa::config {
     void add_frame_generation_options(recomp::config::Config& graphics);
 
     bool get_local_multiplayer();
+
+#if defined(__ANDROID__)
+    // The Touch tab (Android): the on-screen buttons, their size and opacity.
+    void add_touch_options(recomp::config::Config& touch);
+#endif
 }
 
 namespace wa {

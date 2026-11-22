@@ -1,7 +1,8 @@
 # Android port: plan
 
 Status (2026-11-22): builds from Android Studio and plays on the owner's device (first run,
-controller). Next: touch controls.
+controller). Touch controls added (an N64 controller on the screen); next: the owner tries
+them.
 
 ## Decisions (agreed with the project owner)
 
@@ -14,8 +15,10 @@ controller). Next: touch controls.
   `__ANDROID__` or `CMAKE_CROSSCOMPILING`; the desktop build is unaffected.
 - **Ship the compiled game code in the APK**, no ROM (the build checks); the ROM is chosen in
   the launcher (Load ROM, the system document picker).
-- **First milestone: controllers only** (touch controls next, as snprecomp's
-  `touch_controls.cpp` / `TouchControlsView.java`).
+- **Touch controls**: descore's, as in snprecomp and BattleTanx (`TouchControlsView.java`,
+  `src/android/touch_controls.cpp`, `src/android/descore/touch/`), laid out as an N64 controller
+  (stick, A, B, Z, L, R, START, the C buttons, MENU), with the Touch tab's On-screen Buttons
+  (Auto: hidden while a controller is connected), Button Size and Button Opacity.
 
 ## Toolchain (as snprecomp)
 
@@ -54,5 +57,6 @@ without the touch overlay), `LogFiles`, `LogProvider`, `ShareLogActivity`.
 
 ## Next
 
-1. Touch controls (snprecomp's, with Worms' own layout: move, jump, fire with power, aim,
-   weapon panel).
+1. Try the touch controls on the device.
+2. Later, maybe: Worms-specific touch controls (fire with power, aiming, the weapon panel,
+   tap to target).

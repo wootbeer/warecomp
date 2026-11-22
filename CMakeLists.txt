@@ -476,7 +476,14 @@ endif()
 
 if (ANDROID)
     target_link_libraries(WormsArmageddonRecompiled PRIVATE SDL2::SDL2 Freetype::Freetype android log)
-    target_sources(WormsArmageddonRecompiled PRIVATE ${CMAKE_SOURCE_DIR}/src/android/android_startup.cpp)
+    target_sources(WormsArmageddonRecompiled PRIVATE
+        ${CMAKE_SOURCE_DIR}/src/android/android_startup.cpp
+        ${CMAKE_SOURCE_DIR}/src/android/touch_controls.cpp
+        ${CMAKE_SOURCE_DIR}/src/android/descore/touch/descore_touch.c
+    )
+    # descore's touch module, drawn by the app's Java overlay rather than in GL.
+    set_source_files_properties(${CMAKE_SOURCE_DIR}/src/android/descore/touch/descore_touch.c
+        PROPERTIES COMPILE_DEFINITIONS DESCORE_TOUCH_NO_GL)
     target_include_directories(WormsArmageddonRecompiled PRIVATE ${CMAKE_SOURCE_DIR}/src/android)
     # rt64 links SDL2 everywhere except Android, and recompui / recompinput only add the SDL
     # include folders on Windows, macOS and Linux.

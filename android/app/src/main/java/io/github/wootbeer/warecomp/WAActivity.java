@@ -39,6 +39,8 @@ public class WAActivity extends SDLActivity implements InputManager.InputDeviceL
     /** Where files chosen for the game (Load ROM, Install Mods) are copied. */
     private static final String PICKED_FOLDER = "picked";
 
+    private TouchControlsView touchControls;
+
     /** The game runs once per process; its logs are rotated once, at its start. */
     private static boolean runStarted;
 
@@ -52,8 +54,19 @@ public class WAActivity extends SDLActivity implements InputManager.InputDeviceL
         installAssets();
         super.onCreate(savedInstanceState);
 
-        // Touch controls (an overlay over SDL's layout, as in snprecomp) come later: controllers
-        // only for now (android/PLAN.wa.md).
+        // SDL's layout holds the game's surface; the touch controls go over it.
+        if (mLayout != null && !mBrokenLibraries) {
+            touchControls = new TouchControlsView(this);
+            mLayout.addView(touchControls, new ViewGroup.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+            touchControls.setMenuListener(this::openGameMenu);
+
+            InputManager inputManager = (InputManager) getSystemService(Context.INPUT_SERVICE);
+            if (inputManager != null) {
+                inputManager.registerInputDeviceListener(this, null);
+            }
+            touchControls.setGamepadConnected(anyGamepadConnected());
+        }
 
         if (lastRunCrashed && !mBrokenLibraries) {
             offerLogAfterCrash();
@@ -100,6 +113,10 @@ public class WAActivity extends SDLActivity implements InputManager.InputDeviceL
 
     @Override
     protected void onDestroy() {
+        InputManager inputManager = (InputManager) getSystemService(Context.INPUT_SERVICE);
+        if (inputManager != null && touchControls != null) {
+            inputManager.unregisterInputDeviceListener(this);
+        }
         super.onDestroy();
     }
 
@@ -135,6 +152,9 @@ public class WAActivity extends SDLActivity implements InputManager.InputDeviceL
                 | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
                 | View.SYSTEM_UI_FLAG_LAYOUT_STABLE;
         getWindow().getDecorView().setSystemUiVisibility(flags);
+        if (touchControls != null) {
+            touchControls.setSystemUiVisibility(flags);
+        }
     }
 
     /** The game's own menu opens (and closes) on Escape; Back and the MENU button send it. */
@@ -238,10 +258,16 @@ public class WAActivity extends SDLActivity implements InputManager.InputDeviceL
     // handheld's built-in one included.
     @Override
     public void onInputDeviceAdded(int deviceId) {
+        if (touchControls != null) {
+            touchControls.setGamepadConnected(anyGamepadConnected());
+        }
     }
 
     @Override
     public void onInputDeviceRemoved(int deviceId) {
+        if (touchControls != null) {
+            touchControls.setGamepadConnected(anyGamepadConnected());
+        }
     }
 
     @Override

@@ -37,7 +37,7 @@ and leave the game's own behaviour, look and balance alone.
 - Play testing: whole matches, other modes.
 - Steam Deck: the Linux build (`tools/package-linux.sh`) once it runs.
 - Android: plays on the owner's device with a controller (android/README.md, PLAN.md);
-  touch controls next.
+  on-screen N64 controller added.
 
 ## Not planned yet
 

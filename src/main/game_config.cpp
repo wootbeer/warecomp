@@ -5,6 +5,7 @@
 
 #include "recompui/config.h"
 #include "rt64_screen_filter.h"
+#include "wa_android.h"
 
 namespace {
     const std::string local_multiplayer_id = "local_multiplayer";
@@ -135,3 +136,47 @@ bool wa::config::get_local_multiplayer() {
     }
     return std::get<bool>(recompui::config::get_general_config().get_option_value(local_multiplayer_id));
 }
+
+#if defined(__ANDROID__)
+void wa::config::add_touch_options(recomp::config::Config& touch) {
+    touch.add_enum_option(
+        "touch_buttons",
+        "On-screen Buttons",
+        "An N64 controller on the screen for playing without one: the stick, A, B, Z, L, R, START, "
+        "the C buttons, and MENU (the game's menu)."
+        "<br/><br/>"
+        "<b>Auto</b>: shown unless a controller is connected (a handheld's own controls count)."
+        "<br/>"
+        "<b>Always</b>, <b>Never</b>: whether or not one is.",
+        std::vector<recomp::config::ConfigOptionEnumOption>{
+            {(uint32_t)wa::android::TouchButtons::Auto, "Auto", "Auto"},
+            {(uint32_t)wa::android::TouchButtons::Always, "Always", "Always"},
+            {(uint32_t)wa::android::TouchButtons::Never, "Never", "Never"},
+        },
+        wa::android::TouchButtons::Auto
+    );
+    touch.add_option_change_callback("touch_buttons", [](recomp::config::ConfigValueVariant value, recomp::config::ConfigValueVariant, recomp::config::OptionChangeContext) {
+        wa::android::set_touch_buttons((wa::android::TouchButtons)std::get<uint32_t>(value));
+    });
+
+    touch.add_number_option(
+        "touch_size",
+        "Button Size",
+        "The size of the on-screen buttons.",
+        90, 180, 5, 0, true, 100
+    );
+    touch.add_option_change_callback("touch_size", [](recomp::config::ConfigValueVariant value, recomp::config::ConfigValueVariant, recomp::config::OptionChangeContext) {
+        wa::android::set_touch_size(std::get<double>(value));
+    });
+
+    touch.add_number_option(
+        "touch_opacity",
+        "Button Opacity",
+        "How solid the on-screen buttons are drawn.",
+        30, 100, 5, 0, true, 30
+    );
+    touch.add_option_change_callback("touch_opacity", [](recomp::config::ConfigValueVariant value, recomp::config::ConfigValueVariant, recomp::config::OptionChangeContext) {
+        wa::android::set_touch_opacity(std::get<double>(value));
+    });
+}
+#endif

@@ -52,8 +52,10 @@ The ROM is chosen in the game's launcher: **Load ROM** opens the system file pic
 (.z64, .v64 or .n64). It's checked like on desktop and stored in the app's private storage,
 which is excluded from backups and device transfers.
 
-Controllers only for now (touch controls come next, PLAN.md). Back (the system one, not a
-controller's) opens and closes the game's menu; the launcher's Exit closes the app.
+Touch: an N64 controller on the screen (stick, A, B, Z, L, R, START, the C buttons, and MENU for
+the game's menu), shown unless a controller is connected; the **Touch** tab sets that, the
+buttons' size and their opacity. Back (the system one, not a controller's) opens and closes the
+game's menu; the launcher's Exit closes the app.
 
 ## Logs
 
