@@ -3,6 +3,15 @@
 How each piece of the port was found and fixed, newest first. PROGRESS.md
 has the short version.
 
+## 2026-11-22, round 21: matrix sprites turned the wrong way
+
+The owner: sprites turn on the wrong axis, worms flying after a hit too. A
+bazooka shell caught in flight (frame-synchronous capture): an 8 x 14
+image, standing; with x' = A x + B y it flew orange end first, the exhaust
+leading. The microcode's matrix goes the other way round: x' = A x + C y +
+X, y' = B x + D y + Y (the transpose; for a rotation, the opposite angle).
+With it the shell's nose (the image's bottom) leads. 0030 updated.
+
 ## 2026-11-21, round 20: matrix sprites turn
 
 The owner: the air strike target now shows but doesn't turn, and the
