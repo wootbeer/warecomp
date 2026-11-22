@@ -99,6 +99,15 @@ void wa::config::add_graphics_options(recomp::config::Config& graphics) {
         false
     );
 
+    graphics.add_bool_option(
+        "crop_bottom_line",
+        "Crop Bottom Line",
+        "Covers the picture's last line in black, as a TV's edge hid it. The game draws whatever is there "
+        "(the tips of the waves just below the screen, a sliver of the level), which otherwise shows as a "
+        "stray line along the bottom.",
+        true
+    );
+
     wa::config::add_frame_generation_options(graphics);
 
     // Also called when the saved settings load.
@@ -109,6 +118,10 @@ void wa::config::add_graphics_options(recomp::config::Config& graphics) {
     graphics.add_option_change_callback("hide_level_border",
         [](recomp::config::ConfigValueVariant value, recomp::config::ConfigValueVariant, recomp::config::OptionChangeContext) {
             wa::set_hide_level_border(std::get<bool>(value));
+        });
+    graphics.add_option_change_callback("crop_bottom_line",
+        [](recomp::config::ConfigValueVariant value, recomp::config::ConfigValueVariant, recomp::config::OptionChangeContext) {
+            wa::set_crop_bottom_line(std::get<bool>(value));
         });
     graphics.add_option_change_callback("bloom",
         [](recomp::config::ConfigValueVariant value, recomp::config::ConfigValueVariant, recomp::config::OptionChangeContext) {

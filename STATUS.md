@@ -3,6 +3,24 @@
 How each piece of the port was found and fixed, newest first. PROGRESS.md
 has the short version.
 
+## 2026-11-22, round 24: the bottom line is the game's; Crop Bottom Line
+
+The owner's full-size 1080p screenshot: pieces of something on the last
+game line under plain sky. RT64 was made to log, for every background's
+last line, the image row it draws against the row the background's
+parameters give: 73,879 draws over all backgrounds (landscape, parallax,
+water rows, tags, HUD), camera panned up and down, no mismatch. Among
+them: water rows one line tall at y 239 (w 129, fh 1): with the camera just
+above the water, the first wave row's top line (the crests' tips) is the
+picture's last line. The game draws it; a CRT's overscan hid it.
+
+Crop Bottom Line (Graphics tab, on by default): at the end of the match's
+draw list (wa_hud_end), a black fill rect over line 239 with the game's own
+fill sequence (E7, E2 0F0A4000, E3 cycle fill, F7 black, F6 0,239-320,240,
+E7, E3 1-cycle, E2 00503048). Covering the scissor width, RT64 stretches it
+to the wide window. Checked: line 239 black in all 1280 columns, line 238
+and the HUD and text unchanged.
+
 ## 2026-11-22, round 23: turning sprites squashed in widescreen
 
 The owner: turning sprites "not quite flat towards the camera". RT64 maps

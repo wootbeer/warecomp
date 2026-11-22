@@ -27,6 +27,8 @@ namespace wa::config {
 namespace wa {
     // Graphics tab: Hide Level Border (src/game/level_border.cpp).
     void set_hide_level_border(bool hide);
+    // Graphics tab: Crop Bottom Line (src/game/widescreen.cpp).
+    void set_crop_bottom_line(bool crop);
     // General tab: Mouse Stick (src/main/mouse_stick.cpp). Mode 0 Off, 1 Turn,
     // 2 Full; sensitivity in percent.
     void set_mouse_stick(int mode, double percent);

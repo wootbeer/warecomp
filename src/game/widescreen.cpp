@@ -17,11 +17,13 @@
 // Culls are widened in wa.us.toml (right edges by instruction patches, left
 // edges by hooks there); the three functions below replace the blocks that
 // clip an object or background to the screen's left and right edges.
+#include <atomic>
 #include <cstdint>
 #include <vector>
 
 #include "recomp.h"
 #include "wa_recomp_hooks.h"
+#include "wa_config.h"
 
 namespace {
     constexpr int32_t kLeft = -WA_WS_EXTRA;
@@ -223,10 +225,44 @@ extern "C" void wa_hud_entry(uint8_t* rdram, recomp_context* ctx) {
     hud_entry = (MEM_W(0x0, entry) == 1) && (((uint32_t)MEM_W(0x4, entry) >> 16) == 1);
 }
 
-// game_8005FC70, end of the walk (0x80060504).
+// Crop Bottom Line (Graphics tab, STATUS.md round 24). A CRT's overscan hid
+// the picture's last lines, so the game draws whatever is there: the tips of
+// a wave row just below the screen, a sliver of the level. RT64 shows the whole
+// picture; with this on, the last line is covered in black after the match's
+// draw list, with the game's own fill sequence (as its screen clear: render
+// mode, fill cycle, colour, rect, then its 1-cycle mode and render mode back).
+namespace {
+    std::atomic<bool> crop_bottom_line{ true };
+
+    void draw_bottom_bar(uint8_t* rdram, gpr lib) {
+        gpr head = (gpr)MEM_W(kDlHead, lib);
+        auto cmd = [&](uint32_t w0, uint32_t w1) {
+            MEM_W(0, head) = (int32_t)w0;
+            MEM_W(4, head) = (int32_t)w1;
+            head = ADD32(head, 8);
+        };
+        cmd(0xE7000000, 0);          // pipe sync
+        cmd(0xE200001C, 0x0F0A4000); // render mode for fills
+        cmd(0xE3000A01, 0x00300000); // cycle type: fill
+        cmd(0xF7000000, 0x00010001); // fill colour: black
+        cmd(0xF65003C0, 0x000003BC); // fill rect 0,239 - 320,240
+        cmd(0xE7000000, 0);
+        cmd(0xE3000A01, 0x00000000); // cycle type: 1 cycle
+        cmd(0xE200001C, 0x00503048); // the drawing library's render mode
+        MEM_W(kDlHead, lib) = (int32_t)head;
+    }
+}
+
+void wa::set_crop_bottom_line(bool crop) {
+    crop_bottom_line.store(crop);
+}
+
+// game_8005FC70, end of the walk (0x80060504). $s5 is the drawing library.
 extern "C" void wa_hud_end(uint8_t* rdram, recomp_context* ctx) {
-    (void)ctx;
     reset_anchor(rdram);
+    if (crop_bottom_line.load()) {
+        draw_bottom_bar(rdram, ctx->r21);
+    }
     hud_entry = false;
     prev_right_rects.swap(right_rects);
     right_rects.clear();
