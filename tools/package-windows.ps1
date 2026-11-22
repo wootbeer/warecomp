@@ -1,9 +1,8 @@
 # Builds a Release copy of the game and packages it as a zip for distribution.
 #
 # Run from any PowerShell in the repo root, after the usual one-time steps in
-# BUILDING.md (N64Recomp built and run, so RecompiledFuncs/, RecompiledPatches/
-# and rsp/ exist). The script sets up Visual Studio's x64 build environment
-# itself (a Developer PowerShell often defaults to x86, which can't link x64):
+# BUILDING.md (N64Recomp built and run, so RecompiledFuncs/ and rsp/ exist).
+# The script sets up Visual Studio's x64 build environment itself (a Developer PowerShell often defaults to x86, which can't link x64):
 #
 #   Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 #   .\tools\package-windows.ps1 -Version 0.1.0-beta
@@ -34,7 +33,8 @@ if (-not $ClangCl) { $ClangCl = Join-Path $vsPath "VC\Tools\Llvm\x64\bin\clang-c
 
 Set-Location $root
 
-foreach ($required in @("RecompiledFuncs", "RecompiledPatches", "rsp")) {
+# No RecompiledPatches\ here: this port has no MIPS patches (patches/ is a placeholder).
+foreach ($required in @("RecompiledFuncs", "rsp")) {
     if (-not (Test-Path $required)) {
         throw "$required\ is missing -- run the N64Recomp / RSPRecomp steps in BUILDING.md first."
     }
@@ -115,6 +115,8 @@ $licenses = [ordered]@{
     "SlotMap"               = "lib\SlotMap\README.md"
     "DirectXShaderCompiler" = "licenses\DirectXShaderCompiler.txt"
     "SDL_GameControllerDB"  = "licenses\SDL_GameControllerDB.txt"
+    # SDL2.dll comes from RT64's Windows dependencies (mupen64plus-win32-deps); its license is kept here.
+    "SDL2"                  = "licenses\SDL2.txt"
     # Lossless Scaling frame generation (lib\lsfg): lsfg-vk's passes, DXVK's shader compiler, SPIR-V headers.
     "lsfg-vk"               = "lib\lsfg\LICENSE-lsfg-vk.md"
     "DXVK"                  = "lib\lsfg\LICENSE-dxvk.txt"
@@ -128,13 +130,6 @@ foreach ($entry in $licenses.GetEnumerator()) {
         Write-Warning "License file not found: $($entry.Value)"
     }
 }
-# SDL2 comes from CMake's download, in the build folder.
-$sdlLicense = Get-ChildItem -Path (Join-Path $BuildDir "_deps") -Recurse -File -ErrorAction SilentlyContinue |
-    Where-Object { $_.Name -in @("LICENSE.txt", "COPYING.txt") -and $_.FullName -match "sdl2" } |
-    Sort-Object { $_.FullName.Length } | Select-Object -First 1
-if ($sdlLicense) { Copy-Item $sdlLicense.FullName (Join-Path $licenseDir "SDL2.txt") }
-else { Write-Warning "SDL2 license not found under $BuildDir\_deps" }
-
 $zip = Join-Path $root "dist\$name.zip"
 if (Test-Path $zip) { Remove-Item $zip -Force }
 Compress-Archive -Path (Join-Path $stage "*") -DestinationPath $zip
