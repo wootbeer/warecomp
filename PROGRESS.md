@@ -30,10 +30,11 @@ and leave the game's own behaviour, look and balance alone.
 - **Boots, goes through the menus and plays a match**, worms and all (single-player quick
   match, Linux with software Vulkan; STATUS.md rounds 2-5).
 
+- **Saves**: the cartridge EEPROM (4 Kbit) saves and loads (owner, Windows).
+
 ## Next
 
-- Play testing: whole matches, other modes, saving (EEPROM).
-- Saves: the cartridge EEPROM (set to 4 Kbit; confirm in game).
+- Play testing: whole matches, other modes.
 - Steam Deck: the Linux build (`tools/package-linux.sh`) once it runs.
 - Android: see `android/PLAN.md`; the match's coroutines need an aarch64
   context switch there (`src/game/coroutines.cpp`).
