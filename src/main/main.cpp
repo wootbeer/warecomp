@@ -57,6 +57,7 @@
 #include "wa_config.h"
 #include "wa_cheats.h"
 #include "wa_command_line.h"
+#include "wa_restart.h"
 #include "wa_steam.h"
 #include "wa_android.h"
 
@@ -698,6 +699,9 @@ int main(int argc, char** argv) {
     }
     runtime_argv.push_back(nullptr);
 
+    // The menu's Restart button and the quit prompt's Restart choice (src/main/restart.cpp).
+    wa::restart::install(argc, argv);
+
     // Read from the just-loaded config; takes effect on the next launch if
     // changed in the menu.
     if (wa::config::get_local_multiplayer()) {
@@ -773,6 +777,7 @@ int main(int argc, char** argv) {
     // returns, so running static destructors/atexit handlers underneath
     // them can crash on quit -- exit directly instead (same approach as
     // other N64Recomp projects' main()).
+    wa::restart::relaunch_if_requested();
     fflush(stdout);
     fflush(stderr);
 #if defined(__ANDROID__)

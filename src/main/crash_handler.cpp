@@ -64,6 +64,7 @@ namespace {
 #include <unistd.h>
 #endif
 
+#include "wa_restart.h"
 #include "recomp.h"
 #include "librecomp/sections.h"
 
@@ -206,8 +207,13 @@ namespace {
     // reporting a crash. Only once the quit has started (ultramodern::quit sets
     // librecomp's `exited`): before that a fault there is a real crash, and on
     // Android one went unreported (the app just closed; STATUS.md round 26).
+    // If Restart was chosen, the game still starts again (src/main/restart.cpp).
     bool is_shutdown_fault(bool has_access, uintptr_t access) {
-        return exited.load() && has_access && in_rdram(access) && (access - (uintptr_t)rdram_base) < 0x20000000ull;
+        bool shutdown = exited.load() && has_access && in_rdram(access) && (access - (uintptr_t)rdram_base) < 0x20000000ull;
+        if (shutdown) {
+            wa::restart::relaunch_if_requested();
+        }
+        return shutdown;
     }
 
     struct Fault {

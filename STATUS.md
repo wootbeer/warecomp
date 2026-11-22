@@ -3,6 +3,27 @@
 How each piece of the port was found and fixed, newest first. PROGRESS.md
 has the short version.
 
+## 2026-11-22, round 29: Restart button (from snprecomp)
+
+A Restart button in the menu's header between Quit and Close, and a Restart choice in the
+quit prompt (also Alt+F4 or closing the window). It quits as Quit does, then starts the game
+again with the same command line and working folder. Handy after changing mods or settings
+that apply at the next start (Local Multiplayer). Not on Android.
+
+- `lib-patches/RecompFrontend/0027-restart-button.patch`: snprecomp's 0023, unchanged. It
+  applies over this repo's own RecompFrontend patches with line offsets only.
+- `src/main/restart.cpp`, `include/wa_restart.h`: snprecomp's. The relaunch runs at the end
+  of `main`. This repo has no quit watchdog, so the other place is the crash handler's
+  shutdown-fault path (a game thread touching freed RDRAM after the quit), which starts the
+  game again before exiting quietly.
+- **A change from snprecomp:** on Linux it spawned `/proc/self/exe` itself, and the new
+  process was then named `exe` (in top, task managers and `pkill`). It now reads that link
+  at startup and spawns the real path. snprecomp has the same quirk.
+
+**Tested** (sandbox, Linux): Settings, then Restart: the old process quit and a new one
+started as `./build/WormsArmageddonRecompiled --windowed`, the same command line. Under
+gdb: `main` called the relaunch, the child was spawned, and the old process exited normally.
+
 ## 2026-11-22, round 28: portable by default; command line options
 
 Both from snprecomp (`src/main/portable.cpp`, `src/main/command_line.cpp`,
