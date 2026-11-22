@@ -3,6 +3,19 @@
 How each piece of the port was found and fixed, newest first. PROGRESS.md
 has the short version.
 
+## 2026-11-22, round 23: turning sprites squashed in widescreen
+
+The owner: turning sprites "not quite flat towards the camera". RT64 maps
+raw (RDP) triangles across the whole wide target, unlike rects (kept to the
+centred original area unless they cover the scissor width) and the game's
+3D, so in 16:9 every matrix sprite (0030 draws them as raw triangles) was
+stretched 4/3 sideways about the centre: squashed as it turned, and off its
+place towards the sides. `lib-patches/rt64/0031`: raw triangles get the
+same horizontal scale as rects (original width / wide width). Checked: a
+shell drawn at 16:9 now has the shape the matrix gives (decoded texture,
+compared pixel for pixel); its offset from the dumped frame's position
+(the screen is a frame or two behind the dump) is along its path.
+
 ## 2026-11-22, round 22: matrix sprites, texture coordinates and the matrix again
 
 The owner: the air strike target looks like a tick, not an arrow, and
