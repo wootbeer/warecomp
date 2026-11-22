@@ -4,7 +4,7 @@ full-screen one (warecomp STATUS.md round 10).
 With an expanded aspect ratio, a rect covering the whole scissor width is
 taken for a full-screen background and stretched to the wide target. Worms
 Armageddon draws its level's landscape for widescreen itself, as a
-background frame from -128 to 448: stretching that by the aspect ratio put
+background frame from -272 to 592: stretching that by the aspect ratio put
 the landscape out of step with the sprites (worms floating over the ground
 or sunk into it, worse towards the sides). A rect that reaches past the
 colour image's sides is drawn for a wider view, so it keeps its coordinates.

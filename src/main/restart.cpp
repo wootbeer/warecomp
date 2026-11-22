@@ -6,12 +6,14 @@
 // the app is started by the system.
 #include <atomic>
 #include <cstdio>
+#include <cstdlib>
 #include <filesystem>
 #include <string>
 #include <vector>
 
 #if defined(_WIN32)
 #include <Windows.h>
+#include <shellapi.h>
 #elif !defined(__ANDROID__)
 #include <spawn.h>
 extern char** environ;
@@ -23,6 +25,53 @@ extern char** environ;
 #include "wa_restart.h"
 
 namespace {
+    // The command line to start again with. One-off options are left out, so they don't undo
+    // what was changed in the menu since: --set, --fullscreen and --windowed (each saves its
+    // setting again), and --rom <file> becomes --game wa (the ROM is stored by then).
+    template <typename String>
+    std::vector<String> restart_arguments(const std::vector<String>& in) {
+        auto is = [](const String& arg, const char* text) {
+            size_t n = std::char_traits<char>::length(text);
+            if (arg.size() != n) return false;
+            for (size_t i = 0; i < n; i++) if (arg[i] != (typename String::value_type)text[i]) return false;
+            return true;
+        };
+        auto starts = [](const String& arg, const char* text) {
+            size_t n = std::char_traits<char>::length(text);
+            if (arg.size() < n) return false;
+            for (size_t i = 0; i < n; i++) if (arg[i] != (typename String::value_type)text[i]) return false;
+            return true;
+        };
+        auto make = [](const char* text) {
+            String out;
+            for (const char* c = text; *c; c++) out.push_back((typename String::value_type)*c);
+            return out;
+        };
+        std::vector<String> out;
+        bool game_given = false;
+        for (size_t i = 0; i < in.size(); i++) {
+            const String& arg = in[i];
+            if (i > 0 && (is(arg, "--set") || is(arg, "--rom"))) {
+                if (is(arg, "--rom") && !game_given) {
+                    out.push_back(make("--game"));
+                    out.push_back(make("wa"));
+                    game_given = true;
+                }
+                i++; // and its value
+                continue;
+            }
+            if (i > 0 && (starts(arg, "--set=") || is(arg, "--fullscreen") || is(arg, "--windowed"))) {
+                continue;
+            }
+            if (i > 0 && is(arg, "--game")) {
+                if (game_given) { i++; continue; }
+                game_given = true;
+            }
+            out.push_back(arg);
+        }
+        return out;
+    }
+
     std::atomic_bool requested = false;
     std::atomic_bool relaunched = false;
 #if !defined(_WIN32) && !defined(__ANDROID__)
@@ -39,11 +88,19 @@ void wa::restart::install(int argc, char** argv) {
     (void)argv;
 #else
 #if !defined(_WIN32)
-    arguments.assign(argv, argv + argc);
-    std::error_code ec;
-    std::filesystem::path self = std::filesystem::read_symlink("/proc/self/exe", ec);
-    if (!ec && !self.empty()) {
-        program = self.string();
+    arguments = restart_arguments(std::vector<std::string>(argv, argv + argc));
+    // An AppImage: start the AppImage again, not the program inside its mount (gone once this
+    // process ends).
+    if (const char* appimage = std::getenv("APPIMAGE")) {
+        program = appimage;
+        if (!arguments.empty()) arguments[0] = appimage;
+    }
+    else {
+        std::error_code ec;
+        std::filesystem::path self = std::filesystem::read_symlink("/proc/self/exe", ec);
+        if (!ec && !self.empty()) {
+            program = self.string();
+        }
     }
 #else
     (void)argc;
@@ -67,8 +124,33 @@ void wa::restart::relaunch_if_requested() {
         std::fprintf(stderr, "Restart: couldn't find the game's exe\n");
         return;
     }
-    // CreateProcessW may write to the command line, so a copy.
-    std::wstring command_line = GetCommandLineW();
+    // The command line, without the one-off options (restart_arguments), each argument quoted
+    // the way the C runtime parses it back. CreateProcessW may write to it, so a copy.
+    std::vector<std::wstring> args;
+    int count = 0;
+    if (LPWSTR* parsed = CommandLineToArgvW(GetCommandLineW(), &count)) {
+        args.assign(parsed, parsed + count);
+        LocalFree(parsed);
+    }
+    std::wstring command_line;
+    for (const std::wstring& arg : restart_arguments(args)) {
+        if (!command_line.empty()) command_line += L' ';
+        if (!arg.empty() && arg.find_first_of(L" \t\"") == std::wstring::npos) {
+            command_line += arg;
+            continue;
+        }
+        command_line += L'"';
+        size_t backslashes = 0;
+        for (wchar_t c : arg) {
+            if (c == L'\\') { backslashes++; continue; }
+            if (c == L'"') command_line.append(backslashes * 2 + 1, L'\\');
+            else command_line.append(backslashes, L'\\');
+            backslashes = 0;
+            command_line += c;
+        }
+        command_line.append(backslashes * 2, L'\\');
+        command_line += L'"';
+    }
     STARTUPINFOW startup{};
     startup.cb = sizeof(startup);
     PROCESS_INFORMATION process{};

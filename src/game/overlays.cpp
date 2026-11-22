@@ -45,7 +45,12 @@ namespace {
     constexpr uint32_t kInitialSpan = 0x80100400u - 0x80038140u;
 }
 
-void wa_clear_initial_overlays(uint8_t*, recomp_context*) {
+extern "C" void wa_crash_note_rdram(uint8_t* rdram); // crash_handler.cpp
+
+void wa_clear_initial_overlays(uint8_t* rdram, recomp_context*) {
+    // The crash handler translates faulting addresses with this, and tells a fault in freed N64
+    // memory while quitting (harmless) from a real crash.
+    wa_crash_note_rdram(rdram);
     unload_overlays(kInitialStart, kInitialSpan);
 }
 

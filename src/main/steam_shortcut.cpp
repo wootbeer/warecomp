@@ -465,12 +465,15 @@ bool wa::steam::steam_running() {
     if (home == nullptr) {
         return false;
     }
-    std::ifstream pid_file(fs::path(home) / ".steam/steam.pid");
-    long pid = 0;
-    if (!(pid_file >> pid) || pid <= 0) {
-        return false;
+    // The native Steam's, then Flatpak Steam's (its home is inside ~/.var/app).
+    for (const char* pid_path : { ".steam/steam.pid", ".var/app/com.valvesoftware.Steam/.steam/steam.pid" }) {
+        std::ifstream pid_file(fs::path(home) / pid_path);
+        long pid = 0;
+        if ((pid_file >> pid) && pid > 0 && kill((pid_t)pid, 0) == 0) {
+            return true;
+        }
     }
-    return kill((pid_t)pid, 0) == 0;
+    return false;
 #endif
 }
 
@@ -542,7 +545,11 @@ wa::steam::Result wa::steam::add_shortcut(const Location& where) {
         if (fs::exists(file, ec)) {
             std::vector<uint8_t> data = read_file(file);
             size_t pos = 0;
-            if (!data.empty() && !read_map(data, pos, root)) {
+            // A list that's there but couldn't be read (permissions) comes back empty: never
+            // replace it with one holding only this game.
+            std::error_code size_ec;
+            bool unreadable = data.empty() && fs::file_size(file, size_ec) > 0 && !size_ec;
+            if (unreadable || (!data.empty() && !read_map(data, pos, root))) {
                 result.error = "Steam's shortcut list (" + utf8(file) + ") couldn't be read, so it was left alone.";
                 return result;
             }
@@ -570,8 +577,16 @@ wa::steam::Result wa::steam::add_shortcut(const Location& where) {
         }
         bool added = entry == nullptr;
         if (added) {
+            // The next free index: one past the highest numeric key (a list edited by another
+            // tool may have gaps, and a repeated key could make Steam drop an entry).
+            long next = 0;
+            for (const Node& existing : shortcuts->children) {
+                if (numeric(existing.key) && existing.key.size() < 9) {
+                    next = std::max(next, std::stol(existing.key) + 1);
+                }
+            }
             Node map;
-            map.key = std::to_string(shortcuts->children.size());
+            map.key = std::to_string(next);
             shortcuts->children.push_back(std::move(map));
             entry = &shortcuts->children.back();
         }

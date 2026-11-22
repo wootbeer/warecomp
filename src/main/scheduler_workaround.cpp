@@ -1,8 +1,8 @@
 // Workaround for a gap in N64Recomp/ultramodern's cooperative thread
 // scheduler, carried over from btgarecomp (its STATUS.md rounds 47-52, 65,
-// 188; round numbers below are btgarecomp's). Not called yet in this port:
-// a [[patches.hook]] in wa.us.toml calls wa_yield_via_priority_drop from a
-// busy-wait loop if Worms Armageddon turns out to have one that stalls. Several busy-wait polling loops
+// 188; round numbers below are btgarecomp's). [[patches.hook]] entries in
+// wa.us.toml call wa_yield_via_priority_drop from the game's busy-wait loops
+// that stalled. Several busy-wait polling loops
 // in the original N64 code relied on a real hardware interrupt
 // unconditionally preempting whatever was running so the thread clearing
 // the poll flag could get a turn. Ultramodern only ever switches threads at

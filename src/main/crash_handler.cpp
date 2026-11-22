@@ -81,7 +81,7 @@ namespace {
     uint8_t* rdram_base = nullptr;
 
     // The faulting thread's general host registers, set by the handler.
-    uintptr_t host_regs[16];
+    uintptr_t host_regs[32];
     int host_reg_count = 0;
 
     // The faulting thread's name and host call stack, set by the handler.
@@ -512,6 +512,12 @@ namespace {
             for (int i = 0; i < 16; i++) host_regs[i] = (uintptr_t)uctx->uc_mcontext.gregs[regs[i]];
             host_reg_count = 16;
         }
+#elif defined(__aarch64__)
+        // Android (arm64): the faulting pc and sp, and x0-x30 to find the game's context in.
+        uintptr_t pc = (uintptr_t)uctx->uc_mcontext.pc;
+        uintptr_t sp = (uintptr_t)uctx->uc_mcontext.sp;
+        for (int i = 0; i < 31; i++) host_regs[i] = (uintptr_t)uctx->uc_mcontext.regs[i];
+        host_reg_count = 31;
 #else
         uintptr_t pc = 0, sp = (uintptr_t)&uctx;
 #endif
@@ -572,8 +578,8 @@ void wa_report_fatal_error(const char* message) {
     show_crash_message();
 }
 
-// Records where N64 memory starts, to translate faulting addresses (called
-// from a per-frame hook).
+// Records where N64 memory starts, to translate faulting addresses and recognise
+// faults while quitting (called when the game starts, from wa_clear_initial_overlays).
 extern "C" void wa_crash_note_rdram(uint8_t* rdram) {
     rdram_base = rdram;
 }

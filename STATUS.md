@@ -3,6 +3,51 @@
 How each piece of the port was found and fixed, newest first. PROGRESS.md
 has the short version.
 
+## 2026-11-22, round 30: release review (0.1.0 Beta)
+
+Before the first public release: version 0.1.0 (desktop and Android), README and the first
+CHANGELOG, Android release-signing notes, `.gitignore` additions (`*.keystore`, and a portable
+dev build's settings, saves and logs in the repo root), and the audio testing switch
+(`WA_NO_AUDIO_CAP`) removed. History and files checked: all commits are under the GitHub
+username with its noreply address, no personal details; no ROM data, disassembly or game
+assets are tracked.
+
+A separate code review of the project's own code found these, each checked here first:
+
+- **The crash handler never learned where N64 memory is** (`wa_crash_note_rdram` was never
+  called), so a game thread touching freed memory while quitting was reported as a crash
+  (Windows: the crash box; Android: the "closed unexpectedly" prompt), and crash logs lacked
+  the N64 address. Now called when the game starts (`wa_clear_initial_overlays`).
+- **Restart re-applied one-off options:** a `--set` from the first start undid a change made
+  in the menu since. Restart now leaves out `--set`, `--fullscreen` and `--windowed`, and turns
+  `--rom <file>` into `--game wa` (Windows: the command line is rebuilt and requoted). From an
+  AppImage it starts the AppImage again, not the program inside its temporary mount.
+- **Add to Steam:** an existing shortcut list that couldn't be read (permissions) was taken
+  for an empty one and replaced: now left alone with a message. A new entry's key is one past
+  the highest existing one (a list with gaps could get a repeated key). Flatpak Steam's
+  running state is checked too, so its list isn't written while it runs.
+- **HUD anchoring** classified an element cut at the far left by its cut amount instead of
+  where it's drawn (never seen in play).
+- **Portable:** "the game's folder" is the one with `assets/Exo2.ttf`, not any folder named
+  `assets`.
+- **Android crash reports** now record the faulting pc, sp and registers (they had none on
+  arm64), so the game function and its state are found as on PC.
+- **Android shared log:** sections are labelled "this start" and "run before (the one that
+  crashed, if sent from the crash prompt)".
+- Stale comments fixed (the widescreen width in `wa.us.toml` and RT64 patch 0027,
+  `scheduler_workaround.cpp`).
+
+Checked and not changed: Crop Bottom Line's bar is a full-width fill, which RT64 stretches
+across the wide screen (confirmed by the owner in widescreen). Left for later, none seen in
+play: no capacity check on the extra display-list commands (HUD anchors, the bottom bar, the
+border palette); fiber stacks have no guard pages and no alternate signal stack; coroutines
+left suspended at a match's end aren't freed until their address is reused; the Android file
+picker waits without a timeout if the activity is recreated meanwhile.
+
+**Tested** (Linux): started with `--set hide_level_border=on --windowed --rom <file>`, then
+Settings, Restart, confirm: the new process's command line was `--game wa`. Quit from the
+menu: the game closed with no crash report. The quit prompt shows Quit, Restart and Cancel.
+
 ## 2026-11-22: Android touch controls confirmed
 
 The owner played with the on-screen N64 controller on their device: it works.

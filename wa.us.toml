@@ -246,7 +246,7 @@ func = "func_80009320"
 vram = 0x80009374
 value = 0x2A220251
 
-# Left edges: "x + width < 0" tests get + 128 ($v0 = x + width) ...
+# Left edges: "x + width < 0" tests get + WA_WS_EXTRA ($v0 = x + width) ...
 [[patches.hook]]
 func = "func_8000733C"
 before_vram = 0x80007404
@@ -274,7 +274,7 @@ text = """
     }
 """
 
-# ... and "x < -width" tests get - 128 ($v0 = -width).
+# ... and "x < -width" tests get - WA_WS_EXTRA ($v0 = -width).
 [[patches.hook]]
 func = "func_800084EC"
 before_vram = 0x80008548

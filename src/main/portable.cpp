@@ -17,8 +17,9 @@
 
 void wa::portable::use_game_folder() {
 #if !defined(__ANDROID__)
+    // The game's own assets (its font), not just any folder named assets.
     std::error_code ec;
-    if (std::filesystem::is_directory("assets", ec)) {
+    if (std::filesystem::is_regular_file("assets/Exo2.ttf", ec)) {
         return;
     }
     char* base = SDL_GetBasePath();
@@ -27,7 +28,7 @@ void wa::portable::use_game_folder() {
     }
     std::filesystem::path exe_dir = std::filesystem::u8path(base);
     SDL_free(base);
-    if (std::filesystem::is_directory(exe_dir / "assets", ec)) {
+    if (std::filesystem::is_regular_file(exe_dir / "assets" / "Exo2.ttf", ec)) {
         std::filesystem::current_path(exe_dir, ec);
     }
 #endif

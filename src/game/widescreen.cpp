@@ -92,7 +92,9 @@ extern "C" void wa_ws_clip_8010(uint8_t* rdram, recomp_context* ctx) {
     }
     MEM_H(0x2, obj) = (int16_t)(texW << 2);
 
-    hud_element(rdram, ctx->r20, (int32_t)ctx->r17, (int32_t)ctx->r18, w, (int32_t)ctx->r21);
+    // Classified where it's drawn ($s1 now holds the skip when cut on the left).
+    const bool cut = x < kLeft;
+    hud_element(rdram, ctx->r20, cut ? kLeft : x, (int32_t)ctx->r18, cut ? w - (kLeft - x) : w, (int32_t)ctx->r21);
 }
 
 // func_80009320 (background), 0x8000941C-0x80009474. x = $s1, image width =

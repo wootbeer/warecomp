@@ -176,10 +176,10 @@ final class LogFiles {
         try (OutputStream out = new FileOutputStream(report)) {
             write(out, header(context));
             write(out, exitReasons(context));
-            section(out, "Crash report, latest run", new File(dir, CRASH_LOG));
-            section(out, "Java crash, latest run", new File(dir, JAVA_CRASH_LOG));
-            section(out, "Log, latest run", new File(dir, LOG));
-            section(out, "Crash report, run before", new File(dir, PREVIOUS_CRASH_LOG));
+            section(out, "Crash report, this start", new File(dir, CRASH_LOG));
+            section(out, "Java crash, this start", new File(dir, JAVA_CRASH_LOG));
+            section(out, "Log, this start", new File(dir, LOG));
+            section(out, "Crash report, run before (the one that crashed, if sent from the crash prompt)", new File(dir, PREVIOUS_CRASH_LOG));
             section(out, "Java crash, run before", new File(dir, PREVIOUS_JAVA_CRASH_LOG));
             section(out, "Log, run before", new File(dir, PREVIOUS_LOG));
         }
