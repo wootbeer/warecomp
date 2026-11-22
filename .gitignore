@@ -87,3 +87,18 @@ build-release-linux/
 
 # Crash reports from local runs (src/main/crash_handler.cpp)
 crash_log.txt
+
+# Android (android/README.md): Gradle and Android Studio output, local settings, keys,
+# and a command-line Android build folder
+android/.gradle/
+android/.idea/
+android/.kotlin/
+android/build/
+android/app/build/
+android/app/.cxx/
+android/local.properties
+android/keystore.properties
+*.jks
+build-android/
+build-android-configure.log
+build-android.log

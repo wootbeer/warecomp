@@ -3,6 +3,25 @@
 How each piece of the port was found and fixed, newest first. PROGRESS.md
 has the short version.
 
+## 2026-11-22, round 25: the Android port starts (builds; not yet run)
+
+From snprecomp's Android port (android/PLAN.md has the details): the Gradle project
+(`android/`, app id io.github.wootbeer.warecomp, `WAActivity` without the touch overlay for
+now), `cmake/Android.cmake` and `cmake/CrossCompile.cmake` (SDL2 and FreeType from source;
+file_to_c from the desktop build; RecompiledFuncs/ and rsp/ as the desktop build made them),
+`src/android/` (startup, file picker) and 25 library patches (N64Recomp 1, plume 7, rt64 12,
+RecompFrontend 5), all applying after this repo's own (one plume patch's context adjusted).
+CMakeLists: libmain.so on Android, no regeneration of game code when cross-compiling, DXC
+chosen by the build machine.
+
+Game-specific: the match's coroutines get an ARM64 stack switch (bionic has no ucontext),
+tested under qemu-aarch64 (yields, finish, callee-saved registers kept); the crash handler
+unwinds with _Unwind_Backtrace (bionic's backtrace() is API 33+); no Add to Steam on Android.
+
+Built here: libmain.so with NDK r28c, then `gradlew assembleDebug` (as Android Studio's Run):
+a 19.8 MB APK with libmain.so, libSDL2.so and libc++_shared.so; the no-ROM check passed. The
+desktop build is unchanged (it applies the Android patches too; all behind ANDROID).
+
 ## 2026-11-22, round 24: the bottom line is the game's; Crop Bottom Line
 
 The owner's full-size 1080p screenshot: pieces of something on the last

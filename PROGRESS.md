@@ -36,8 +36,8 @@ and leave the game's own behaviour, look and balance alone.
 
 - Play testing: whole matches, other modes.
 - Steam Deck: the Linux build (`tools/package-linux.sh`) once it runs.
-- Android: see `android/PLAN.md`; the match's coroutines need an aarch64
-  context switch there (`src/game/coroutines.cpp`).
+- Android: builds (android/README.md, PLAN.md); first run on a device next, then touch
+  controls.
 
 ## Not planned yet
 

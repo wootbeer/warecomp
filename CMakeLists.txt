@@ -88,6 +88,11 @@ if (RECOMP_FLATPAK)
     add_compile_definitions(RECOMP_FLATPAK)
 endif()
 
+# Host-built tools and pre-generated sources when cross-compiling (Android, android/README.md).
+include(${CMAKE_SOURCE_DIR}/cmake/CrossCompile.cmake)
+# SDL2, FreeType and nfd for Android.
+include(${CMAKE_SOURCE_DIR}/cmake/Android.cmake)
+
 # Local RT64 fixes (lib-patches/rt64/), applied to the submodule at configure time.
 include(${CMAKE_SOURCE_DIR}/cmake/ApplyLibPatches.cmake)
 wa_apply_lib_patches(rt64)
@@ -117,6 +122,8 @@ endif()
 
 set(BUILD_SHARED_LIBS OFF)
 
+# Recompiler fixes (lib-patches/N64Recomp/): recomp.h's float-to-int conversions on ARM64.
+wa_apply_lib_patches(N64Recomp lib/N64ModernRuntime/N64Recomp)
 add_subdirectory(${CMAKE_SOURCE_DIR}/lib/N64ModernRuntime)
 
 
@@ -181,8 +188,10 @@ target_sources(RecompiledFuncs PRIVATE ${FUNC_C_SOURCES} ${FUNC_CXX_SOURCES})
 # files in the same build; recomp_overlays.inl is included by src/main/register_overlays.cpp,
 # so the executable waits for the regeneration too (below, after it is defined).
 set(WA_ROM_FILE "${CMAKE_SOURCE_DIR}/Worms Armageddon (USA).z64")
+# Not when cross-compiling (Android): N64RecompCLI is then built for the target and can't run
+# here; cmake/CrossCompile.cmake uses the sources a desktop build generated.
 if (EXISTS "${WA_ROM_FILE}" AND (FUNC_C_SOURCES OR FUNC_CXX_SOURCES)
-        AND NOT FUNC_C_SOURCES MATCHES "recompiled_funcs_placeholder")
+        AND NOT FUNC_C_SOURCES MATCHES "recompiled_funcs_placeholder" AND NOT CMAKE_CROSSCOMPILING)
     add_custom_command(OUTPUT ${CMAKE_BINARY_DIR}/recompiled_funcs.stamp
         COMMAND $<TARGET_FILE:N64RecompCLI> wa.us.toml
         COMMAND ${CMAKE_COMMAND} -E touch ${CMAKE_BINARY_DIR}/recompiled_funcs.stamp
@@ -263,8 +272,14 @@ else()
 endif()
 
 
-# Main executable
-add_executable(WormsArmageddonRecompiled)
+# Main executable. On Android it's libmain.so instead, which SDLActivity loads and
+# whose main() it calls.
+if (ANDROID)
+    add_library(WormsArmageddonRecompiled SHARED)
+    set_target_properties(WormsArmageddonRecompiled PROPERTIES OUTPUT_NAME main)
+else()
+    add_executable(WormsArmageddonRecompiled)
+endif()
 
 # The frontend (src/main), the game-specific fixes (src/game) and the
 # recompiled RSP audio microcode (rsp/, generated from the ROM). If none of
@@ -459,6 +474,16 @@ if (CMAKE_SYSTEM_NAME MATCHES "Linux")
     target_link_libraries(WormsArmageddonRecompiled PRIVATE "-latomic -static-libstdc++" ${CMAKE_DL_LIBS} Threads::Threads)
 endif()
 
+if (ANDROID)
+    target_link_libraries(WormsArmageddonRecompiled PRIVATE SDL2::SDL2 Freetype::Freetype android log)
+    target_sources(WormsArmageddonRecompiled PRIVATE ${CMAKE_SOURCE_DIR}/src/android/android_startup.cpp)
+    target_include_directories(WormsArmageddonRecompiled PRIVATE ${CMAKE_SOURCE_DIR}/src/android)
+    # rt64 links SDL2 everywhere except Android, and recompui / recompinput only add the SDL
+    # include folders on Windows, macOS and Linux.
+    target_link_libraries(rt64 SDL2::SDL2)
+    target_include_directories(WormsArmageddonRecompiled PRIVATE ${SDL2_INCLUDE_DIRS})
+endif()
+
 # TODO fix the rt64 CMake script so that this doesn't need to be duplicated here
 # For DXC
 set (DXC_COMMON_OPTS "-I${PROJECT_SOURCE_DIR}/src")
@@ -471,10 +496,15 @@ set (DXC_GS_OPTS "${DXC_COMMON_OPTS}" "-E" "GSMain" "-T gs_6_0")
 set (DXC_RT_OPTS "${DXC_COMMON_OPTS}" "-D" "RT_SHADER" "-T" "lib_6_3" "-fspv-target-env=vulkan1.1spirv1.4" "-fspv-extension=SPV_KHR_ray_tracing" "-fspv-extension=SPV_EXT_descriptor_indexing")
 
 if (${WIN32})
-    set (DXC "${PROJECT_SOURCE_DIR}/lib/rt64/src/contrib/dxc/bin/x64/dxc.exe")
     add_compile_definitions(NOMINMAX)
+endif()
+
+# DXC (used by recompui for its shaders) runs on the build machine, so it's picked by the host,
+# not the target; the two differ when cross-compiling for Android.
+if (CMAKE_HOST_WIN32)
+    set (DXC "${PROJECT_SOURCE_DIR}/lib/rt64/src/contrib/dxc/bin/x64/dxc.exe")
 else()
-    if (APPLE)
+    if (CMAKE_HOST_APPLE)
         # Apple's binary is universal, so it'll work on both x86_64 and arm64
         set (DXC "DYLD_LIBRARY_PATH=${PROJECT_SOURCE_DIR}/lib/rt64/src/contrib/dxc/lib/arm64" "${PROJECT_SOURCE_DIR}/lib/rt64/src/contrib/dxc/bin/arm64/dxc-macos")
         if(CMAKE_SIZEOF_VOID_P EQUAL 8 AND CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|amd64|AMD64")
@@ -483,7 +513,7 @@ else()
             set(SPIRVCROSS "DYLD_LIBRARY_PATH=${PROJECT_SOURCE_DIR}/lib/rt64/src/contrib/spirv-cross/lib/arm64" "${PROJECT_SOURCE_DIR}/lib/rt64//src/contrib/spirv-cross/bin/x64/spirv-cross")
         endif()
     else()
-        if(CMAKE_SIZEOF_VOID_P EQUAL 8 AND CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|amd64|AMD64")
+        if(CMAKE_HOST_SYSTEM_PROCESSOR MATCHES "x86_64|amd64|AMD64")
             set (DXC "LD_LIBRARY_PATH=${PROJECT_SOURCE_DIR}/lib/rt64/src/contrib/dxc/lib/x64" "${PROJECT_SOURCE_DIR}/lib/rt64/src/contrib/dxc/bin/x64/dxc-linux")
         else()
             set (DXC "LD_LIBRARY_PATH=${PROJECT_SOURCE_DIR}/lib/rt64/src/contrib/dxc/lib/arm64" "${PROJECT_SOURCE_DIR}/lib/rt64/src/contrib/dxc/bin/arm64/dxc-linux")
@@ -508,6 +538,10 @@ if(MSVC)
     set(WA_CSTDINT_FORCE_INCLUDE "/FI cstdint")
 else()
     set(WA_CSTDINT_FORCE_INCLUDE "-include cstdint")
+endif()
+if (ANDROID)
+    target_include_directories(recompui PRIVATE ${SDL2_INCLUDE_DIRS})
+    target_include_directories(recompinput PRIVATE ${SDL2_INCLUDE_DIRS})
 endif()
 foreach(_wa_rml_target rmlui_core rmlui_debugger recompui)
     if(TARGET ${_wa_rml_target})
@@ -579,7 +613,11 @@ target_sources(WormsArmageddonRecompiled PRIVATE ${GENERATED_NRM_SOURCES})
 # from the ROM by RSPRecomp (n_aspMain.us.toml), like RecompiledFuncs/,
 # so it's gitignored and only built when the ROM is present.
 set(WA_ROM_PATH "${CMAKE_SOURCE_DIR}/Worms Armageddon (USA).z64")
-if (EXISTS "${WA_ROM_PATH}")
+if (CMAKE_CROSSCOMPILING)
+    # Pre-generated by a desktop build (cmake/CrossCompile.cmake checks it exists) and already
+    # in SOURCES; RSPRecomp would be built for the target, so it isn't regenerated here.
+    target_compile_definitions(WormsArmageddonRecompiled PRIVATE WA_HAS_RSP_AUDIO)
+elseif (EXISTS "${WA_ROM_PATH}")
     list(REMOVE_ITEM SOURCES ${CMAKE_SOURCE_DIR}/rsp/n_aspMain.cpp)
     add_custom_command(OUTPUT ${CMAKE_SOURCE_DIR}/rsp/n_aspMain.cpp
         COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_SOURCE_DIR}/rsp

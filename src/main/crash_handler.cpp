@@ -26,7 +26,38 @@
 #elif defined(__linux__)
 #include <csignal>
 #include <dlfcn.h>
+#if defined(__ANDROID__)
+// bionic has backtrace() only from API 33; the unwind tables cover the signal frame there too.
+#include <unwind.h>
+namespace {
+    struct UnwindState {
+        void** frames;
+        int count;
+        int max;
+    };
+    _Unwind_Reason_Code add_unwind_frame(_Unwind_Context* context, void* state_void) {
+        UnwindState* state = static_cast<UnwindState*>(state_void);
+        uintptr_t pc = (uintptr_t)_Unwind_GetIP(context);
+        if (pc == 0 || state->count >= state->max) {
+            return _URC_END_OF_STACK;
+        }
+        state->frames[state->count++] = (void*)pc;
+        return _URC_NO_REASON;
+    }
+    int collect_backtrace(void** frames, int max) {
+        UnwindState state{ frames, 0, max };
+        _Unwind_Backtrace(add_unwind_frame, &state);
+        return state.count;
+    }
+}
+#else
 #include <execinfo.h>
+namespace {
+    int collect_backtrace(void** frames, int max) {
+        return backtrace(frames, max);
+    }
+}
+#endif
 #include <pthread.h>
 #include <ucontext.h>
 #include <sys/uio.h>
@@ -479,7 +510,7 @@ namespace {
             // From the handler: its own frames and the signal trampoline come
             // first, then the faulting frame (the pc) and its callers.
             void* frames[max_host_frames + 8];
-            int n = backtrace(frames, max_host_frames + 8);
+            int n = collect_backtrace(frames, max_host_frames + 8);
             int first = 0;
             for (int i = 0; i < n; i++) {
                 if ((uintptr_t)frames[i] == pc) { first = i; break; }

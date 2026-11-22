@@ -1,128 +1,60 @@
 # Android port: plan
 
-Carried over from btgarecomp, whose plan this is; the same decisions apply
-to this port. Read "BattleTanx"/"BTGA" below as this game, and see the
-notes at the end for what differs here.
-
-Status: planning done, nothing built yet. Written 2026-10-08 so a new session
-can start without re-deciding anything.
+Status (2026-11-22): the Android project is in place and `libmain.so` builds for arm64 with
+the NDK (checked in the sandbox); not yet run on a device. Next: the owner runs it from Android
+Studio (README.md), then touch controls.
 
 ## Decisions (agreed with the project owner)
 
-- **Ship the compiled game code in the APK**, the same as the Windows and
-  Linux releases (and Banjo Android, WarioWare Twisted Android). The user
-  still supplies their own ROM through a picker; the APK contains no ROM,
-  textures, audio or other ROM data. Add a packaging guard that fails the
-  build if a ROM (`*.z64`, `*.n64`, `*.v64`) ends up in the APK.
-- **No code from BanjoRecomp-Android** (or BanjoRecomp). Use the official
-  N64ModernRuntime, RT64 and RecompFrontend submodules, with our own
-  Android changes kept as patches in `lib-patches/` (applied at configure
-  time by `cmake/ApplyLibPatches.cmake`, like the RT64 flicker fix).
-  BanjoRecomp-Android may be read only to see *where* changes are needed.
-- **App shell**: SDL2's own `android-project` template (zlib license) as
-  the skeleton (`SDLActivity` hosts the native game), plus the owner's
-  **DesCore** pieces from `wootbeer/gsrandroid` (their own code): the
-  launcher activity (ROM picker via the system document picker, copy into
-  app storage, hash check), and later the touch overlay. DesCore's video
-  and render-thread core does **not** fit (it owns a GLES surface and runs
-  the game on its render thread; RT64 renders with Vulkan on its own
-  thread), so only the launcher, touch and lifecycle know-how carry over.
-- **Phones and handhelds.** First milestone is controller-only on the
-  owner's Retroid Pocket 6 (Snapdragon / Adreno); touch controls come next
-  so phones work. Reference for touch: DesCore's `descore_touch` (owner's)
-  and JRickey/BattleShip's `TouchOverlay.java` / `AnalogStickView.java`
-  (MIT).
-- **Android Studio workflow must work**: open `android/` in Android Studio,
-  pick the USB device, press Run (debug APK installed and launched).
+- **Base: snprecomp's Android port** (wootbeer/snprecomp, `android/`, itself from the
+  BattleTanx: Global Assault port), reused as is where it fits: `android/`,
+  `cmake/Android.cmake`, `cmake/CrossCompile.cmake`, `cmake/android/`, `src/android/`
+  (startup, file picker) and its Android library patches.
+- **Android Studio workflow**: a second checkout (`C:\dev\warecomp-android`), its `android/`
+  folder opened in Android Studio, Run (README.md). All Android code is behind `ANDROID` /
+  `__ANDROID__` or `CMAKE_CROSSCOMPILING`; the desktop build is unaffected.
+- **Ship the compiled game code in the APK**, no ROM (the build checks); the ROM is chosen in
+  the launcher (Load ROM, the system document picker).
+- **First milestone: controllers only** (touch controls next, as snprecomp's
+  `touch_controls.cpp` / `TouchControlsView.java`).
 
-## Project setup
+## Toolchain (as snprecomp)
 
-- Location: `android/` in this repo (desktop builds unaffected).
-- Match the owner's toolchain (from their gsrandroid project): Android
-  Gradle Plugin **9.3.2**, Gradle wrapper **9.5.0**.
-- CMake **3.22.1 or newer** from the SDK (our root CMakeLists needs 3.20;
-  the owner currently has 3.10.2 for other projects). Pin `version` in
-  `externalNativeBuild`.
-- NDK r27 or newer (C++20). Pin `ndkVersion`.
-- `minSdk 26` (Android 8; Vulkan support before that is unreliable),
-  ABI `arm64-v8a` only.
-- `externalNativeBuild` points at the repo-root `CMakeLists.txt`, building
-  the game as a shared library `libmain.so` (what SDLActivity loads).
+Android Gradle Plugin 9.3.2, Gradle 9.5.0, NDK r28c (28.2.13676358), SDK CMake 3.31.6,
+`compileSdk`/`targetSdk` 35, `minSdk` 28, `arm64-v8a` only, `ANDROID_STL=c++_shared`, debug
+builds `RelWithDebInfo`. SDL 2.32.10 and FreeType 2.13.3 built from source. App id
+`io.github.wootbeer.warecomp`.
 
-## Build-system work (root CMakeLists.txt)
+## What came over from snprecomp
 
-- **Host tools are not cross-compiled.** `N64RecompCLI`, `RSPRecomp` and
-  `file_to_c` run at build time; under the Android toolchain they would be
-  built for ARM. Use host-built copies (e.g. a `-DWA_HOST_TOOLS_DIR=`
-  pointing at the desktop build) or require the generated outputs to exist.
-- **Pre-generated inputs**: `RecompiledFuncs/` (N64Recomp, done once on the
-  desktop), `rsp/n_aspMain.cpp`, `RecompiledPatches/`. Gradle should stop
-  with a clear message if they are missing.
-- **MIPS patches**: the `make` step for `patches/` must branch on the
-  *host* (`CMAKE_HOST_WIN32` -> `wsl.exe make`), not on `WIN32`, which is
-  false when targeting Android. Or require `patches.elf` prebuilt.
-- Executable target becomes a `SHARED` library on Android; `main()` is
-  provided through SDL's `SDL_main`.
-- Linux-only bits to guard for Android: GTK / nativefiledialog, `-static-libstdc++`,
-  X11. Our `crash_handler.cpp` Linux path (sigaction) works on Android;
-  `stack_top` uses `pthread_getattr_np`, available in bionic.
+Library patches, renumbered after this repo's own (the submodules are at the same commits):
 
-## Library changes needed (as lib-patches)
+| snprecomp | here |
+| --- | --- |
+| N64Recomp 0002 (float-to-int as x86 on ARM64) | N64Recomp 0001 |
+| plume 0001, 0002, 0005, 0006, 0007, 0008, 0010 | plume 0006-0012 (0011's context adjusted for this repo's plume 0005) |
+| rt64 0002-0006, 0008, 0022-0026, 0028 | rt64 0032-0043 |
+| RecompFrontend 0013-0017 | RecompFrontend 0022-0026 |
 
-Found by reading the code; confirm while building.
+Native code: `src/android/android_startup.cpp` (logcat and log.txt, tag `WA`; the window for
+plume after the background; app storage as the working directory), `src/android/nfd_android.cpp`
+(file dialogs through the document picker). Java: `WAActivity` (snprecomp's `SnPActivity`
+without the touch overlay), `LogFiles`, `LogProvider`, `ShareLogActivity`.
 
-- **N64ModernRuntime**: compiles for ARM already (`sse2neon`). Window
-  handle on Android is already `SDL_Window*`. Needs: app pause/resume
-  (backgrounding) so game threads and audio stop cleanly.
-- **RecompFrontend**:
-  - `recompui/src/util/file.cpp` `get_app_folder_path()`: the Linux branch
-    uses `$HOME/.config/<id>`; Android needs app-private storage
-    (`SDL_AndroidGetInternalStoragePath()`).
-  - ROM selection uses nativefiledialog (no Android support): bridge to the
-    Java launcher's picker, or let the launcher pass the ROM path in.
-  - Message boxes during startup: use SDL's / Java's instead of desktop ones.
-  - UI MSAA may need to be off on Android.
-- **RT64**: Vulkan backend (plume) needs the Android surface
-  (`VK_KHR_android_surface`) from the SDL window, and swapchain recreation
-  when the Surface is destroyed and recreated (pause/resume). RT64's own
-  standalone window code says "Android unimplemented", but recomp passes
-  its own SDL window, so that path is not used. Shader tools (DXC,
-  spirv-cross) run on the host at build time. Our `lib-patches/rt64/`
-  flicker fix must still apply.
+## Specific to this game
 
-## Game-specific
+- **Coroutines** (`src/game/coroutines.cpp`): bionic has no ucontext, so ARM64 gets its own
+  stack switch (`wa_arm64_switch`: x19-x30 and d8-d15 saved on the stack, the stack pointer
+  swapped). Checked under qemu-aarch64: a coroutine yields five times and finishes, and the
+  caller's callee-saved registers survive every switch.
+- **Crash handler**: `backtrace()` is API 33+ in bionic; Android walks the stack with
+  `_Unwind_Backtrace`.
+- **Launcher**: no Add to Steam.
+- Lossless Scaling frame generation (`lib/lsfg`) builds on Android too; its "Load Lossless.dll"
+  has nothing to load there.
 
-- Controller Pak saves (`.mpk`) live in the app folder; consider
-  import/export later.
-- Settings and saves path: app-private storage; `portable.txt` irrelevant.
-- `src/main/main.cpp` window creation: the Linux branch (`SDL_WINDOW_VULKAN`)
-  is the Android base; fullscreen, landscape.
+## Next
 
-## Environment note
-
-`dl.google.com` (Android SDK / NDK downloads) was blocked by this cloud
-environment's network policy. The owner added it to Allowed domains on
-2026-10-08; the change applies to new sessions. `maven.google.com` and
-`services.gradle.org` were already reachable.
-
-## Order of work
-
-1. Install SDK cmdline-tools, NDK, CMake, platform 35 in the sandbox; check
-   the root CMake configures with the Android toolchain.
-2. Skeleton: SDL android-project + Gradle files, `libmain.so` from the root
-   CMake, debug APK builds.
-3. Library patches until it links; then the DesCore launcher for the ROM.
-4. Owner tests on the Retroid (USB, Android Studio Run), sends `adb logcat`.
-5. Touch controls, then phone testing.
-
-
-## Differences for Worms Armageddon
-
-- No netplay to leave out: the desktop build has none either.
-- No MIPS patches yet (`patches/` is empty, so no cross-compiled
-  `patches.elf` step); the menu's UI pump is a `[[patches.hook]]` in
-  `wa.us.toml`, which needs nothing extra on Android.
-- Saves are a cartridge EEPROM, handled by the runtime: nothing
-  game-specific to store.
-- Touch controls matter more than in BattleTanx: the game is turn-based and
-  menu-heavy, which suits a phone.
+1. First run on the owner's device (logs: `adb logcat -s WA`, or Share log).
+2. Touch controls (snprecomp's, with Worms' own layout: move, jump, fire with power, aim,
+   weapon panel).

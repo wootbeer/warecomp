@@ -57,6 +57,7 @@
 #include "wa_config.h"
 #include "wa_cheats.h"
 #include "wa_steam.h"
+#include "wa_android.h"
 
 #if defined(WA_HAS_APP_ICON)
 #include "icon_bytes.h"
@@ -191,11 +192,18 @@ static ultramodern::renderer::WindowHandle create_window(ultramodern::gfx_callba
     uint32_t flags = SDL_WINDOW_RESIZABLE;
 #if defined(__APPLE__)
     flags |= SDL_WINDOW_METAL;
-#elif defined(RT64_SDL_WINDOW_VULKAN)
-    // Only defined on Linux (see CMakeLists.txt) -- Windows uses plume's
-    // D3D12 backend instead, which doesn't need an SDL window flag (it
-    // talks to the GPU through the raw HWND returned below).
+#elif defined(RT64_SDL_WINDOW_VULKAN) || defined(__ANDROID__)
+    // Linux (see CMakeLists.txt) and Android -- Windows uses plume's D3D12
+    // backend instead, which doesn't need an SDL window flag (it talks to the
+    // GPU through the raw HWND returned below). On Android the flag matters
+    // too: without a graphics flag SDL defaults to OpenGL there and connects
+    // an EGL surface to the window, after which Vulkan can't create its own.
     flags |= SDL_WINDOW_VULKAN;
+#endif
+#if defined(__ANDROID__)
+    // Always fullscreen on Android: SDL then hides the system bars (immersive
+    // mode), so the game gets the whole screen (snprecomp).
+    flags |= SDL_WINDOW_FULLSCREEN_DESKTOP;
 #endif
 
     // 16:9, two thirds of the screen's height (in real pixels, so not tiny
@@ -560,7 +568,9 @@ static void launcher_init(recompui::LauncherMenu* menu) {
     };
     slim(options->add_start_game_or_load_rom_option());
     slim(options->add_settings_option());
+#if !defined(__ANDROID__)
     slim(options->add_option("Add to Steam", on_add_to_steam));
+#endif
     slim(options->add_exit_option());
 }
 
@@ -599,6 +609,11 @@ static void launcher_update(recompui::LauncherMenu*) {
 }
 
 int main(int argc, char** argv) {
+#if defined(__ANDROID__)
+    // Logs to logcat and log.txt, the renderer's window after a trip to the background, and the
+    // app's storage as the working directory (src/android/android_startup.cpp).
+    wa::android::startup();
+#endif
     std::set_terminate(report_unhandled_exception_and_abort);
 
     recomp::Version project_version{};
@@ -729,5 +744,9 @@ int main(int argc, char** argv) {
     // other N64Recomp projects' main()).
     fflush(stdout);
     fflush(stderr);
+#if defined(__ANDROID__)
+    // A quit, not a crash: no "closed unexpectedly" at the next start (LogFiles.java).
+    std::remove("running");
+#endif
     std::_Exit(EXIT_SUCCESS);
 }

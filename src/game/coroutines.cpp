@@ -19,8 +19,9 @@
 // the function that called longjmp, with another frame's registers (the first
 // A press in a match crashed with a null `this` in game_8009E818).
 //
-// Here each coroutine body runs on a fiber of its own (Windows fibers,
-// ucontext elsewhere), all on the game thread that started it, so the
+// Here each coroutine body runs on a fiber of its own (Windows fibers; on
+// Android, which has no ucontext, a small ARM64 stack switch below; ucontext
+// elsewhere), all on the game thread that started it, so the
 // runtime's per-thread state stays right. The three functions above are
 // replaced by hooks (wa.us.toml) that switch fibers and save/restore exactly
 // the registers the game's setjmp does. Everything in N64 memory (the carved
@@ -29,6 +30,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <unordered_map>
 
 #include "recomp.h"
@@ -37,14 +39,68 @@
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
 #elif defined(__ANDROID__)
-// TODO(android): bionic has no makecontext/swapcontext; this needs a small
-// context switch of its own (aarch64) before the match works there.
-#error "Coroutine fibers are not implemented for Android yet (src/game/coroutines.cpp)"
+#if !defined(__aarch64__)
+#error "The Android build is ARM64 only (android/app/build.gradle.kts)."
+#endif
+#define WA_ARM64_SWITCH 1
 #else
 #include <ucontext.h>
 #endif
 
 extern "C" recomp_func_t* get_function(int32_t vram);
+
+#if defined(WA_ARM64_SWITCH)
+// Android (bionic has no getcontext/makecontext/swapcontext). wa_arm64_switch(from, to) saves
+// the callee-saved registers (x19-x30, d8-d15: AAPCS64) on the current stack, stores the stack
+// pointer in *from, and resumes the context whose stack pointer is to, as saved the same way.
+// A new context's stack starts as such a saved frame whose x30 (where `ret` goes) is
+// wa_arm64_trampoline and whose x19 is the argument: it calls wa_arm64_coroutine_entry(x19).
+extern "C" void wa_arm64_switch(void** from_sp, void* to_sp);
+extern "C" void wa_arm64_trampoline();
+extern "C" void wa_arm64_coroutine_entry(void* arg);
+__asm__(
+    ".text\n"
+    ".p2align 4\n"
+    ".globl wa_arm64_switch\n"
+    ".type wa_arm64_switch, %function\n"
+    "wa_arm64_switch:\n"
+    "    sub sp, sp, #176\n"
+    "    stp x19, x20, [sp, #0]\n"
+    "    stp x21, x22, [sp, #16]\n"
+    "    stp x23, x24, [sp, #32]\n"
+    "    stp x25, x26, [sp, #48]\n"
+    "    stp x27, x28, [sp, #64]\n"
+    "    stp x29, x30, [sp, #80]\n"
+    "    stp d8, d9, [sp, #96]\n"
+    "    stp d10, d11, [sp, #112]\n"
+    "    stp d12, d13, [sp, #128]\n"
+    "    stp d14, d15, [sp, #144]\n"
+    "    mov x9, sp\n"
+    "    str x9, [x0]\n"
+    "    mov sp, x1\n"
+    "    ldp x19, x20, [sp, #0]\n"
+    "    ldp x21, x22, [sp, #16]\n"
+    "    ldp x23, x24, [sp, #32]\n"
+    "    ldp x25, x26, [sp, #48]\n"
+    "    ldp x27, x28, [sp, #64]\n"
+    "    ldp x29, x30, [sp, #80]\n"
+    "    ldp d8, d9, [sp, #96]\n"
+    "    ldp d10, d11, [sp, #112]\n"
+    "    ldp d12, d13, [sp, #128]\n"
+    "    ldp d14, d15, [sp, #144]\n"
+    "    add sp, sp, #176\n"
+    "    ret\n"
+    ".size wa_arm64_switch, .-wa_arm64_switch\n"
+    ".p2align 4\n"
+    ".globl wa_arm64_trampoline\n"
+    ".type wa_arm64_trampoline, %function\n"
+    "wa_arm64_trampoline:\n"
+    "    mov x0, x19\n"
+    "    bl wa_arm64_coroutine_entry\n"
+    "    brk #0\n"
+    ".size wa_arm64_trampoline, .-wa_arm64_trampoline\n"
+);
+#endif
 
 namespace {
     // What the game's setjmp saves.
@@ -92,6 +148,10 @@ namespace {
 #if defined(_WIN32)
         LPVOID fiber = nullptr;
         LPVOID caller_fiber = nullptr;
+#elif defined(WA_ARM64_SWITCH)
+        void* co_sp = nullptr;
+        void* caller_sp = nullptr;
+        void* stack = nullptr;
 #else
         ucontext_t co_uc{};
         ucontext_t caller_uc{};
@@ -118,6 +178,8 @@ namespace {
     void switch_to_caller(Coroutine* co) {
 #if defined(_WIN32)
         SwitchToFiber(co->caller_fiber);
+#elif defined(WA_ARM64_SWITCH)
+        wa_arm64_switch(&co->co_sp, co->caller_sp);
 #else
         swapcontext(&co->co_uc, &co->caller_uc);
 #endif
@@ -128,6 +190,8 @@ namespace {
 #if defined(_WIN32)
         co->caller_fiber = GetCurrentFiber();
         SwitchToFiber(co->fiber);
+#elif defined(WA_ARM64_SWITCH)
+        wa_arm64_switch(&co->caller_sp, co->co_sp);
 #else
         swapcontext(&co->caller_uc, &co->co_uc);
 #endif
@@ -169,6 +233,9 @@ namespace {
             ConvertThreadToFiber(nullptr);
         }
     }
+#elif defined(WA_ARM64_SWITCH)
+    // The saved frame wa_arm64_switch restores: x19-x28, x29, x30, d8-d15 (176 bytes).
+    constexpr size_t kArm64FrameSize = 176;
 #else
     Coroutine* starting = nullptr;
 
@@ -189,6 +256,12 @@ namespace {
         (void)rdram;
     }
 }
+
+#if defined(WA_ARM64_SWITCH)
+extern "C" void wa_arm64_coroutine_entry(void* arg) {
+    run_body(static_cast<Coroutine*>(arg));
+}
+#endif
 
 // Replaces game_800AAC9C (start).
 extern "C" void wa_coro_start(uint8_t* rdram, recomp_context* ctx) {
@@ -225,6 +298,17 @@ extern "C" void wa_coro_start(uint8_t* rdram, recomp_context* ctx) {
         std::abort();
     }
 #else
+#if defined(WA_ARM64_SWITCH)
+    co->stack = std::malloc(kFiberStackSize);
+    {
+        uintptr_t top = ((uintptr_t)co->stack + kFiberStackSize) & ~(uintptr_t)15;
+        uint64_t* frame = reinterpret_cast<uint64_t*>(top - kArm64FrameSize);
+        std::memset(frame, 0, kArm64FrameSize);
+        frame[0] = (uint64_t)(uintptr_t)co;                          // x19: the argument
+        frame[11] = (uint64_t)(uintptr_t)&wa_arm64_trampoline;      // x30: where `ret` goes
+        co->co_sp = frame;
+    }
+#else
     co->stack = std::malloc(kFiberStackSize);
     getcontext(&co->co_uc);
     co->co_uc.uc_stack.ss_sp = co->stack;
@@ -232,6 +316,7 @@ extern "C" void wa_coro_start(uint8_t* rdram, recomp_context* ctx) {
     co->co_uc.uc_link = nullptr;
     makecontext(&co->co_uc, uc_entry, 0);
     starting = co;
+#endif
 #endif
     switch_to_coroutine(co);
 
