@@ -50,7 +50,8 @@ sudo apt-get install cmake ninja-build libsdl2-dev libgtk-3-dev libvulkan-dev ll
 paru -S cmake ninja llvm clang lld sdl2-compat freetype2 gtk3 vulkan-headers
 ```
 
-Linux builds and runs in development, but no Linux release is packaged yet.
+Linux release packages (also the Steam Deck's) are made by `tools/package-linux.sh`
+(section 6).
 macOS is not set up.
 
 ## 3. Put the ROM in place
@@ -141,7 +142,7 @@ alone, and writes `dist\WormsArmageddonRecompiled-<version>-windows.zip` with
 the exe, its DLLs, `assets\`, README and license. Steps 1-4 must be done
 first.
 
-### Linux (experimental)
+### Linux and Steam Deck
 
 ```bash
 tools/package-linux.sh 0.1.1
@@ -150,7 +151,8 @@ tools/package-linux.sh 0.1.1
 Builds Release in `build-release-linux/` (or `$BUILD_DIR`) and writes
 `dist/WormsArmageddonRecompiled-<version>-linux-x86_64.tar.gz`: the binary, a
 `WormsArmageddonRecompiled.sh` launcher that runs it from its own folder, the
-assets, README, license and third-party license notices. SDL2, GTK 3,
+assets, the icon Add to Steam uses (`icons/app.png`), README, license and
+third-party license notices. SDL2, GTK 3,
 FreeType and Vulkan come from the system; the binary needs glibc 2.38 or
 newer if built on Ubuntu 24.04. Settings and saves go to
 `~/.config/warecomp` (or the game folder with `portable.txt`).

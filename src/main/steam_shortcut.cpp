@@ -228,6 +228,20 @@ namespace {
         return std::string(text.begin(), text.end());
     }
 
+    // The shortcut's icon: on Windows the exe's own (icons/app.ico is built into it). A Linux binary
+    // has none, so the package carries icons/app.png beside it (tools/package-linux.sh); an
+    // AppImage's own folder doesn't, so it falls back to the exe there (Steam's blank icon).
+    std::string icon_path(const fs::path& exe) {
+#if !defined(_WIN32)
+        std::error_code ec;
+        fs::path png = exe.parent_path() / "icons" / "app.png";
+        if (fs::is_regular_file(png, ec)) {
+            return utf8(png);
+        }
+#endif
+        return utf8(exe);
+    }
+
     std::string quoted(const fs::path& path) {
         return "\"" + utf8(path) + "\"";
     }
@@ -569,7 +583,7 @@ wa::steam::Result wa::steam::add_shortcut(const Location& where) {
             string_node("AppName", kAppName),
             string_node("Exe", exe_field),
             string_node("StartDir", start_dir),
-            string_node("icon", utf8(exe)),
+            string_node("icon", icon_path(exe)),
             string_node("ShortcutPath", ""),
             string_node("LaunchOptions", ""),
             int_node("IsHidden", 0),

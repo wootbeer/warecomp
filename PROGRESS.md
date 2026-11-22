@@ -35,7 +35,9 @@ and leave the game's own behaviour, look and balance alone.
 ## Next
 
 - Play testing: whole matches, other modes.
-- Steam Deck: the Linux build (`tools/package-linux.sh`) once it runs.
+- Steam Deck: ready to release, not tried on a Deck yet. The Linux package works from a
+  fresh install at 1280x800, fullscreen by default on a Deck, with Add to Steam and its icon
+  (STATUS.md round 27).
 - Android: plays on the owner's device with a controller (android/README.md, PLAN.md);
   on-screen N64 controller added.
 

@@ -3,6 +3,39 @@
 How each piece of the port was found and fixed, newest first. PROGRESS.md
 has the short version.
 
+## 2026-11-22, round 27: Steam Deck readiness
+
+The Steam Deck uses the Linux package (`tools/package-linux.sh`). Not released and not
+tried on a Deck yet. Tested in the sandbox as a new player would use it: the tarball
+extracted into a fresh folder, an empty home folder, `SteamDeck=1`, and a 1280x800 screen.
+
+- **Packaging:** both package scripts copied a `SOUND_PACKS.md` that this repo doesn't
+  have, so `package-linux.sh` stopped there (and `package-windows.ps1` would have too).
+  Removed from both.
+- **Fullscreen and 16:10:** RecompFrontend already defaults Window Mode to Fullscreen on
+  a Deck (its board vendor is Valve, or `SteamDeck=1`), and the new graphics.json had
+  it. The sandbox has no window manager, so the window was resized by hand to
+  1280x800. The launcher, title and a quick match fill the screen. In the match the
+  timer is at the left edge and the wind bar at the right, as Clamp16x9's HUD anchoring
+  intends.
+- **Battery (btgarecomp's issue 6: its main thread spun a core):** measured with
+  `top -H`. At the title the game threads use about 2% of a core; in a match about
+  4% (Game 6 at 2%, the rest under 1%). Nothing spins. The remaining CPU is lavapipe
+  drawing on the CPU, which the Deck's GPU does instead.
+- **Add to Steam on Linux:** with a mock `~/.local/share/Steam/userdata/<id>/config`,
+  the launcher wrote a correct `shortcuts.vdf`: Exe is the binary, StartDir its folder
+  (assets load from there), and it reported success. The shortcut's icon was the binary
+  itself, but a Linux binary has no icon, so Steam would show a blank one. The package
+  now carries `icons/app.png`, and the shortcut uses it when it's there
+  (`icon_path`, `src/main/steam_shortcut.cpp`). Tested: the icon field points to it.
+  Steam artwork (cover, banner) is still empty until the owner chooses it.
+- **Libraries:** the binary needs glibc 2.38 (symbol versions checked). SteamOS 3.7 is
+  on a newer Arch base, reportedly glibc 2.41 (not confirmed). SDL2, GTK 3 (the
+  ROM file picker), FreeType and Vulkan come from the system. SteamOS has them.
+- **Docs:** README has a Steam Deck section: extract, Load ROM and Add to Steam in
+  Desktop Mode (the file picker is a desktop window), play in Gaming Mode, and battery
+  tips. BUILDING.md's Linux packaging section covers the Deck.
+
 ## 2026-11-22, round 26: an unexplained close on Android; better reports
 
 The owner's shared log after "closed unexpectedly": the run before ended with

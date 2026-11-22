@@ -9,8 +9,7 @@
 #
 # Output: dist/WormsArmageddonRecompiled-<version>-linux-x86_64.tar.gz with the
 # binary, a launcher script that runs it from its own folder (assets/ is
-# loaded relative to the working directory), assets, README, the sound pack
-# guide, license and the
+# loaded relative to the working directory), assets, the icon, README, license and the
 # third-party license notices. The system provides SDL2, GTK 3, FreeType and
 # Vulkan. Uses its own build folder (build-release-linux, or $BUILD_DIR).
 set -euo pipefail
@@ -42,7 +41,9 @@ cd "$(dirname "$(readlink -f "$0")")" && exec ./WormsArmageddonRecompiled "$@"
 EOF
 chmod 755 "$stage/WormsArmageddonRecompiled.sh"
 cp -r assets "$stage/"
-cp README.md SOUND_PACKS.md COPYING "$stage/"
+# The icon Add to Steam gives the shortcut (a Linux binary carries none).
+mkdir -p "$stage/icons" && cp icons/app.png "$stage/icons/"
+cp README.md COPYING "$stage/"
 
 # License notices for the third-party code built into the binary.
 licenses=(

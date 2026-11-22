@@ -37,6 +37,23 @@ Place it in an accessible folder on your device.
 
 Add a blank portable.txt in the application's folder to make portable if you want to save settings locally.
 
+## Steam Deck
+Use the Linux build (`WormsArmageddonRecompiled-<version>-linux-x86_64.tar.gz`).
+In Desktop Mode:
+1. Extract it somewhere that stays put, such as `~/Games`.
+2. Run `WormsArmageddonRecompiled.sh`, choose **Load ROM** and pick your game file.
+   The file picker is a desktop window, so do this step in Desktop Mode.
+3. Choose **Add to Steam** in the launcher. Steam has to be closed for this, and the
+   launcher offers to close it. It then adds the game to your library as a non-Steam
+   game, with its icon, and offers to open Steam again.
+
+Then play it from Gaming Mode. On a Deck, the game starts fullscreen and the Deck's
+controls work as a controller. The game fills the Deck's 16:10 screen, with the HUD
+at its edges.
+
+For longer battery life, set **Framerate** to **Original** and use a lower
+**Resolution** or no **MSAA** (Graphics tab).
+
 ## Building
 See [BUILDING.md](BUILDING.md).
 
