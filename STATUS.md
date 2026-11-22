@@ -19,7 +19,12 @@ gaps that could hide what happened:
   the description), and holds java_crash.txt (an uncaught Java exception,
   written before the process dies). Its title said Sin and Punishment.
 
-Cause not known yet; the next shared log should say.
+It wasn't a crash: the owner saw the prompt at startup with the game's menu
+still up, so the run before had been stopped while in use (Android Studio's
+Run installs a new build by stopping the running one), which leaves the
+marker. The prompt now also needs Android to say the last run crashed
+(ApplicationExitInfo: a crash, native crash, ANR, or SIGSEGV/SIGBUS/SIGILL/
+SIGFPE/SIGABRT); before Android 11 the marker alone decides, as before.
 
 ## 2026-11-22, round 25: the Android port starts (builds; not yet run)
 

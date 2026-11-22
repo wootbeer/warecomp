@@ -55,12 +55,47 @@ final class LogFiles {
      */
     static boolean startRun(Context context) {
         File dir = context.getFilesDir();
-        boolean crashed = new File(dir, RUNNING_MARKER).exists();
+        boolean crashed = new File(dir, RUNNING_MARKER).exists() && lastExitWasCrash(context);
         rotate(new File(dir, LOG), new File(dir, PREVIOUS_LOG));
         rotate(new File(dir, CRASH_LOG), new File(dir, PREVIOUS_CRASH_LOG));
         rotate(new File(dir, JAVA_CRASH_LOG), new File(dir, PREVIOUS_JAVA_CRASH_LOG));
         new File(dir, RUNNING_MARKER).delete();
         return crashed;
+    }
+
+    /**
+     * Whether Android says the last run ended in a crash (Android 11+): a crash on either side, a
+     * fatal signal or not responding. The marker alone also stays behind when the app is stopped
+     * while in use (Android Studio's Run installing a new build, Force stop), which isn't a crash.
+     * Older Android: the marker decides.
+     */
+    private static boolean lastExitWasCrash(Context context) {
+        if (Build.VERSION.SDK_INT < 30) {
+            return true;
+        }
+        try {
+            ActivityManager am = (ActivityManager) context.getSystemService(Context.ACTIVITY_SERVICE);
+            List<ApplicationExitInfo> exits = am.getHistoricalProcessExitReasons(context.getPackageName(), 0, 1);
+            if (exits.isEmpty()) {
+                return false;
+            }
+            ApplicationExitInfo last = exits.get(0);
+            switch (last.getReason()) {
+                case ApplicationExitInfo.REASON_CRASH:
+                case ApplicationExitInfo.REASON_CRASH_NATIVE:
+                case ApplicationExitInfo.REASON_ANR:
+                    return true;
+                case ApplicationExitInfo.REASON_SIGNALED: {
+                    // SIGILL, SIGABRT, SIGBUS, SIGFPE, SIGSEGV: a crash; SIGKILL and the like: stopped.
+                    int signal = last.getStatus();
+                    return signal == 4 || signal == 6 || signal == 7 || signal == 8 || signal == 11;
+                }
+                default:
+                    return false;
+            }
+        } catch (Exception e) {
+            return true;
+        }
     }
 
     private static void rotate(File current, File previous) {
