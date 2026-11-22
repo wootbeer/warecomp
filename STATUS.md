@@ -3,6 +3,29 @@
 How each piece of the port was found and fixed, newest first. PROGRESS.md
 has the short version.
 
+## 2026-11-22, round 22: matrix sprites, texture coordinates and the matrix again
+
+The owner: the air strike target looks like a tick, not an arrow, and
+flying worms are still wrong. Two mistakes in 0030:
+
+- Texture coordinates. RT64's sampler halves the UVs of triangles that
+  aren't perspective-corrected (TextureSampler.hlsli: perspCorrectionMod
+  0.5 when !textPersp && !rect; the RDP triangle path passes S / 16, twice
+  the texels). 0030 passed texels, so each matrix sprite showed only the
+  top-left quarter of its image, magnified (half an arrow: a tick).
+  Now twice the texels. textPersp is off for these (logged).
+- The matrix. Round 21's transpose came from reading that magnified
+  quarter. The S2DEX manual's is x' = A x + B y + X, y' = C x + D y + Y,
+  turning about the screen point X, Y (objX, objY: the image's corner from
+  it). Checked with the corners RT64 computes (logged per sprite) against
+  the screen: they match what's drawn; a bazooka shell (8 x 14, nose at
+  the image's top) has its top along its path with the manual's formula and
+  across it with the transpose.
+
+Also: a configure re-applies lib-patches over working-tree edits to lib/rt64,
+so test builds must regenerate the patch (one of round 22's test builds ran
+an older 0030).
+
 ## 2026-11-22, round 21: matrix sprites turned the wrong way
 
 The owner: sprites turn on the wrong axis, worms flying after a hit too. A
