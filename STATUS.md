@@ -23,6 +23,9 @@ that apply at the next start (Local Multiplayer). Not on Android.
 **Tested** (sandbox, Linux): Settings, then Restart: the old process quit and a new one
 started as `./build/WormsArmageddonRecompiled --windowed`, the same command line. Under
 gdb: `main` called the relaunch, the child was spawned, and the old process exited normally.
+Confirmed by the owner on Windows: the header button is there and Restart works. (A freeze
+on launch reported before that was on the previous build, without this change; it didn't
+repeat.)
 
 ## 2026-11-22, round 28: portable by default; command line options
 
