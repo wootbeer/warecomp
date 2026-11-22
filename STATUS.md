@@ -3,6 +3,10 @@
 How each piece of the port was found and fixed, newest first. PROGRESS.md
 has the short version.
 
+## 2026-11-22: Android touch controls confirmed
+
+The owner played with the on-screen N64 controller on their device: it works.
+
 ## 2026-11-22, round 29: Restart button (from snprecomp)
 
 A Restart button in the menu's header between Quit and Close, and a Restart choice in the
