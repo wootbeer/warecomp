@@ -50,6 +50,7 @@ public class WAActivity extends SDLActivity implements InputManager.InputDeviceL
         if (!runStarted) {
             runStarted = true;
             lastRunCrashed = LogFiles.startRun(this);
+            LogFiles.catchJavaCrashes(getApplicationContext());
         }
         installAssets();
         super.onCreate(savedInstanceState);

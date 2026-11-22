@@ -67,6 +67,9 @@ namespace {
 #include "recomp.h"
 #include "librecomp/sections.h"
 
+// librecomp (src/recomp.cpp): set when the game quits.
+extern std::atomic_bool exited;
+
 namespace {
     struct GameFunc {
         uintptr_t host;
@@ -199,11 +202,12 @@ namespace {
     }
 
     // On quit, librecomp frees rdram while the game's threads (never joined)
-    // can still be running; their next access faults. While the game runs,
-    // the whole 512 MB KSEG0 window is mapped, so a fault inside it can only
-    // be that -- exit quietly instead of reporting a crash.
+    // can still be running; their next access faults: exit quietly instead of
+    // reporting a crash. Only once the quit has started (ultramodern::quit sets
+    // librecomp's `exited`): before that a fault there is a real crash, and on
+    // Android one went unreported (the app just closed; STATUS.md round 26).
     bool is_shutdown_fault(bool has_access, uintptr_t access) {
-        return has_access && in_rdram(access) && (access - (uintptr_t)rdram_base) < 0x20000000ull;
+        return exited.load() && has_access && in_rdram(access) && (access - (uintptr_t)rdram_base) < 0x20000000ull;
     }
 
     struct Fault {

@@ -1,5 +1,7 @@
 package io.github.wootbeer.warecomp;
 
+import android.app.ActivityManager;
+import android.app.ApplicationExitInfo;
 import android.content.ClipData;
 import android.content.Context;
 import android.content.Intent;
@@ -12,6 +14,9 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.io.PrintWriter;
+import java.io.StringWriter;
+import java.util.List;
 import java.io.RandomAccessFile;
 import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
@@ -30,6 +35,9 @@ final class LogFiles {
 
     static final String LOG = "log.txt";
     static final String CRASH_LOG = "crash_log.txt";
+    /** An uncaught exception on the Java side (the activity, SDL's Java code). */
+    private static final String JAVA_CRASH_LOG = "java_crash.txt";
+    private static final String PREVIOUS_JAVA_CRASH_LOG = "java_crash_previous.txt";
     private static final String PREVIOUS_LOG = "log_previous.txt";
     private static final String PREVIOUS_CRASH_LOG = "crash_log_previous.txt";
     /** Also removed by the game when it quits (start_quit_watchdog, src/main/main.cpp). */
@@ -50,6 +58,7 @@ final class LogFiles {
         boolean crashed = new File(dir, RUNNING_MARKER).exists();
         rotate(new File(dir, LOG), new File(dir, PREVIOUS_LOG));
         rotate(new File(dir, CRASH_LOG), new File(dir, PREVIOUS_CRASH_LOG));
+        rotate(new File(dir, JAVA_CRASH_LOG), new File(dir, PREVIOUS_JAVA_CRASH_LOG));
         new File(dir, RUNNING_MARKER).delete();
         return crashed;
     }
@@ -59,6 +68,28 @@ final class LogFiles {
         if (current.exists() && !current.renameTo(previous)) {
             current.delete();
         }
+    }
+
+    /**
+     * Writes an uncaught Java exception to java_crash.txt before the process dies (the native
+     * crash handler only sees native crashes), then lets Android handle it as before.
+     */
+    static void catchJavaCrashes(Context context) {
+        final File file = new File(context.getFilesDir(), JAVA_CRASH_LOG);
+        final Thread.UncaughtExceptionHandler previous = Thread.getDefaultUncaughtExceptionHandler();
+        Thread.setDefaultUncaughtExceptionHandler((thread, error) -> {
+            try (OutputStream out = new FileOutputStream(file)) {
+                StringWriter trace = new StringWriter();
+                error.printStackTrace(new PrintWriter(trace));
+                write(out, "Uncaught exception on thread \"" + thread.getName() + "\" at "
+                        + timestamp(System.currentTimeMillis()) + ":\n" + trace);
+            } catch (Throwable ignored) {
+                // Nothing more to do.
+            }
+            if (previous != null) {
+                previous.uncaughtException(thread, error);
+            }
+        });
     }
 
     /** The game is in the foreground: a crash from here on leaves the marker behind. */
@@ -91,7 +122,7 @@ final class LogFiles {
         Intent send = new Intent(Intent.ACTION_SEND);
         send.setType("text/plain");
         send.putExtra(Intent.EXTRA_STREAM, uri);
-        send.putExtra(Intent.EXTRA_SUBJECT, "Sin and Punishment Recompiled log");
+        send.putExtra(Intent.EXTRA_SUBJECT, "Worms Armageddon Recompiled log");
         // Some share targets read the file through the clip data, so it carries the grant too.
         send.setClipData(ClipData.newRawUri(file.getName(), uri));
         send.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
@@ -109,9 +140,12 @@ final class LogFiles {
         File dir = context.getFilesDir();
         try (OutputStream out = new FileOutputStream(report)) {
             write(out, header(context));
+            write(out, exitReasons(context));
             section(out, "Crash report, latest run", new File(dir, CRASH_LOG));
+            section(out, "Java crash, latest run", new File(dir, JAVA_CRASH_LOG));
             section(out, "Log, latest run", new File(dir, LOG));
             section(out, "Crash report, run before", new File(dir, PREVIOUS_CRASH_LOG));
+            section(out, "Java crash, run before", new File(dir, PREVIOUS_JAVA_CRASH_LOG));
             section(out, "Log, run before", new File(dir, PREVIOUS_LOG));
         }
         return report;
@@ -126,7 +160,7 @@ final class LogFiles {
             // Leave it unknown.
         }
         StringBuilder text = new StringBuilder();
-        text.append("Sin and Punishment Recompiled ").append(version).append('\n');
+        text.append("Worms Armageddon Recompiled ").append(version).append('\n');
         text.append("Device: ").append(Build.MANUFACTURER).append(' ').append(Build.MODEL)
                 .append(" (").append(Build.DEVICE).append(")\n");
         if (Build.VERSION.SDK_INT >= 31) {
@@ -154,6 +188,58 @@ final class LogFiles {
             while ((n = in.read(buf)) > 0) {
                 out.write(buf, 0, n);
             }
+        }
+    }
+
+    /**
+     * Why Android says the app's last runs ended (Android 11+): a crash on either side, a native
+     * signal, low memory, an ANR, the user or the system closing it, with its description. This
+     * catches what no log can, such as the system killing the app.
+     */
+    private static String exitReasons(Context context) {
+        StringBuilder text = new StringBuilder("\n===== How the last runs ended (Android) =====\n");
+        if (Build.VERSION.SDK_INT < 30) {
+            return text.append("Not available before Android 11.\n").toString();
+        }
+        try {
+            ActivityManager am = (ActivityManager) context.getSystemService(Context.ACTIVITY_SERVICE);
+            List<ApplicationExitInfo> exits = am.getHistoricalProcessExitReasons(context.getPackageName(), 0, 4);
+            if (exits.isEmpty()) {
+                text.append("None recorded.\n");
+            }
+            for (ApplicationExitInfo exit : exits) {
+                text.append(timestamp(exit.getTimestamp())).append(": ").append(exitReasonName(exit.getReason()))
+                        .append(", status ").append(exit.getStatus())
+                        .append(", importance ").append(exit.getImportance())
+                        .append(", memory ").append(exit.getPss() / 1024).append(" MB (PSS), ")
+                        .append(exit.getRss() / 1024).append(" MB (RSS)");
+                if (exit.getDescription() != null) {
+                    text.append(": ").append(exit.getDescription());
+                }
+                text.append('\n');
+            }
+        } catch (Exception e) {
+            text.append("Couldn't read them: ").append(e).append('\n');
+        }
+        return text.toString();
+    }
+
+    private static String exitReasonName(int reason) {
+        switch (reason) {
+            case ApplicationExitInfo.REASON_EXIT_SELF: return "exited by itself";
+            case ApplicationExitInfo.REASON_SIGNALED: return "killed by a signal";
+            case ApplicationExitInfo.REASON_LOW_MEMORY: return "killed for low memory";
+            case ApplicationExitInfo.REASON_CRASH: return "Java crash";
+            case ApplicationExitInfo.REASON_CRASH_NATIVE: return "native crash";
+            case ApplicationExitInfo.REASON_ANR: return "not responding (ANR)";
+            case ApplicationExitInfo.REASON_INITIALIZATION_FAILURE: return "failed to start";
+            case ApplicationExitInfo.REASON_PERMISSION_CHANGE: return "permission change";
+            case ApplicationExitInfo.REASON_EXCESSIVE_RESOURCE_USAGE: return "excessive resource use";
+            case ApplicationExitInfo.REASON_USER_REQUESTED: return "closed by the user";
+            case ApplicationExitInfo.REASON_USER_STOPPED: return "stopped by the user";
+            case ApplicationExitInfo.REASON_DEPENDENCY_DIED: return "a dependency died";
+            case ApplicationExitInfo.REASON_OTHER: return "other (system)";
+            default: return "reason " + reason;
         }
     }
 

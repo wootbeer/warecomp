@@ -3,6 +3,24 @@
 How each piece of the port was found and fixed, newest first. PROGRESS.md
 has the short version.
 
+## 2026-11-22, round 26: an unexplained close on Android; better reports
+
+The owner's shared log after "closed unexpectedly": the run before ended with
+no crash report, and the log just stops (as quiet as a normal run). Two
+gaps that could hide what happened:
+
+- The crash handler took any fault inside the 512 MB RDRAM window for the
+  known quit-time fault (game threads touching freed RDRAM) and exited
+  quietly, at any time. Now only once the quit has started (librecomp's
+  `exited`); before that it's reported like any crash.
+- The shared log (LogFiles.java) now starts with Android's own record of
+  how the last runs ended (ApplicationExitInfo, Android 11+: crash, native
+  crash, low memory, signal, ANR, closed by the user..., with memory use and
+  the description), and holds java_crash.txt (an uncaught Java exception,
+  written before the process dies). Its title said Sin and Punishment.
+
+Cause not known yet; the next shared log should say.
+
 ## 2026-11-22, round 25: the Android port starts (builds; not yet run)
 
 From snprecomp's Android port (android/PLAN.md has the details): the Gradle project
