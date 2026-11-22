@@ -1,0 +1,343 @@
+# N64Recomp config for Worms Armageddon (USA) (En,Fr,Es).
+# The ROM has a resident segment and two overlays that load at the same
+# address (frontend menus, then the match); see STATUS.md round 1 and
+# WASyms/wa.us.syms.toml.
+
+[input]
+entrypoint = 0x80000400
+output_func_path = "RecompiledFuncs"
+rom_file_path = "Worms Armageddon (USA).z64"
+symbols_file_path = "WASyms/wa.us.syms.toml"
+
+
+[patches]
+
+# The boot stub calls main (func_800030B0) and then hits `break`. On the N64
+# main never returns: starting the idle thread takes the CPU from the boot
+# code for good. In this runtime osStartThread from the boot thread returns,
+# so main returns into the `break`, which ends the program ("Encountered
+# break at original vram 0x80000438"). A `jr $ra` there (the next word is
+# already a nop for its delay slot) lets the boot thread just end, as it
+# does in games whose stub loops instead (STATUS.md round 1).
+[[patches.instruction]]
+func = "recomp_entrypoint"
+vram = 0x80000438
+value = 0x03E00008
+
+# After loading the match overlay, the loader clears 0x1120 bytes "of its BSS"
+# at 0xB00E7090: a cartridge ROM address (the linker gave the BSS start's ROM
+# address). On the N64 writes to cartridge ROM are ignored, so nothing
+# happens; here every address is RAM, and the write lands far outside it
+# (segfault on starting a match, STATUS.md round 5). Always take the branch
+# that skips the clear (`beqz $s0` -> `b`, same target 0x8000452C).
+[[patches.instruction]]
+func = "func_8000405C"
+vram = 0x80004514
+value = 0x10000005
+
+# The launcher/menu UI's per-frame callback pump (recompui's
+# recomp_run_ui_callbacks), once per presented frame: in libultra's scheduler
+# (func_80033948, the task-complete handler), right after its
+# osViSwapBuffer call returns. The callee-saved registers the game still
+# needs are untouched there, and the caller-saved ones the pump uses were
+# already clobbered by the call (btgarecomp replaced its game's own swap
+# routine with a patch instead; STATUS.md round 1).
+# Audio pacing (STATUS.md round 14): the audio thread (func_80022620) skips a
+# round while osAiGetStatus reports the AI FIFO full (bit 31, checked by the
+# bltz on $s0 after the call). The runtime never reports full, so report it
+# while enough audio is queued; $v0 is copied to $s0 in the delay slot of the
+# next jal, at 0x800226A8.
+[[patches.hook]]
+func = "func_80022620"
+before_vram = 0x800226A4
+text = """
+    if (wa_audio_fifo_full()) {
+        ctx->r2 = (int32_t)0x80000000;
+    }
+"""
+
+[[patches.hook]]
+func = "func_80033948"
+before_vram = 0x800339C4
+text = """
+    recomp_run_ui_callbacks(rdram, ctx);
+    wa_cheats_frame(rdram);
+"""
+
+# Busy-waits. Two small routines spin on memory another thread changes, with
+# no OS call in the loop: on the N64 the retrace interrupt preempted them, but
+# this runtime only switches threads at OS calls, so the spinning thread
+# starved the one that would end the wait (the main thread sat in
+# func_80032D0C from the start: STATUS.md round 1). Each loop calls
+# wa_yield_via_priority_drop (src/main/scheduler_workaround.cpp, btgarecomp's
+# fix for the same thing), which delivers pending events and lets another
+# thread run.
+#
+# func_80032D0C: wait for the next frame (spins until the retrace counter at
+# 0x80048768 changes). Loop: lw at 0x80032D14, beq back to it.
+[[patches.hook]]
+func = "func_80032D0C"
+before_vram = 0x80032D14
+text = """
+    wa_yield_via_priority_drop(rdram);
+"""
+
+# func_80032C78: starting a display list, spins while the current frame
+# buffer's busy flag (the byte at 0x80048764 + the buffer index at
+# 0x80048760) is set, i.e. until that buffer's graphics task is done (the
+# scheduler client, func_800328AC, clears it). Loop: lw at 0x80032C98, bnez
+# back to it.
+[[patches.hook]]
+func = "func_80032C78"
+before_vram = 0x80032C98
+text = """
+    wa_yield_via_priority_drop(rdram);
+"""
+
+# func_80032D28: spins while either flag byte at 0x80048764/0x80048765 is set.
+# Both loops start at its first instruction (0x80032D28: lui; the second
+# loop's branch goes to 0x80032D28 too).
+[[patches.hook]]
+func = "func_80032D28"
+before_vram = 0x80032D28
+text = """
+    wa_yield_via_priority_drop(rdram);
+"""
+
+# The code overlays (src/game/overlays.cpp): right after the main thread's
+# loop DMAs one to 0x80048FE0 (func_8002FEB0 returns once it's in), tell the
+# runtime which one is there, before the loop calls into it.
+# Frontend: DMA call at 0x800043E8 (ROM 0x38D40, 0x46370 bytes).
+[[patches.hook]]
+func = "func_8000405C"
+before_vram = 0x800043F0
+text = """
+    wa_load_overlay(0x38D40, 0x46370);
+"""
+
+# The match: DMA call at 0x8000450C (ROM 0x7F0B0, 0x67FE0 bytes of code and
+# data; the DMA's 0x69110 includes its BSS).
+[[patches.hook]]
+func = "func_8000405C"
+before_vram = 0x80004514
+text = """
+    wa_load_overlay(0x7F0B0, 0x67FE0);
+"""
+
+# The frontend's modules (src/game/overlays.cpp): front_8004F574 picks one of
+# seven by index ($s3 = its cartridge address, $s1 = its size) and DMAs it to
+# 0x800B20F0 (call at 0x8004F774); register it right after.
+[[patches.hook]]
+func = "front_8004F574"
+before_vram = 0x8004F77C
+text = """
+    wa_load_module((uint32_t)ctx->r19, (uint32_t)ctx->r17);
+"""
+
+# Waiting for the sound to stop: func_8000B55C and func_8000B5BC (stopping the
+# music, e.g. as the frontend hands over to a match) call func_8001FC28, the
+# sound driver's count of channels still playing, in a loop until it's 0.
+# Only the audio thread brings the count down, and the loop never lets it
+# run (STATUS.md round 5). Loops: 0x8000B584 and 0x8000B5E8 (jal back to
+# itself through the bnez).
+[[patches.hook]]
+func = "func_8000B55C"
+before_vram = 0x8000B584
+text = """
+    wa_yield_via_priority_drop(rdram);
+"""
+
+[[patches.hook]]
+func = "func_8000B5BC"
+before_vram = 0x8000B5E8
+text = """
+    wa_yield_via_priority_drop(rdram);
+"""
+
+# The match's coroutines (src/game/coroutines.cpp, STATUS.md round 5): built
+# on the game's own setjmp/longjmp, which can't move execution on the host.
+# Each body runs on a fiber; these hooks replace the three functions that
+# switch (the code after each hook's `return`/`goto` doesn't run).
+# Start (game_800AAC9C, whole function).
+[[patches.hook]]
+func = "game_800AAC9C"
+before_vram = 0x800AAC9C
+text = """
+    wa_coro_start(rdram, ctx);
+    return;
+"""
+
+# Yield (game_800AAC68, whole function).
+[[patches.hook]]
+func = "game_800AAC68"
+before_vram = 0x800AAC68
+text = """
+    wa_coro_yield(rdram, ctx);
+    return;
+"""
+
+# Resume: game_800AABB0's state-1 path, 0x800AAC18-0x800AAC3C, then where
+# setjmp's nonzero return goes (0x800AAC40).
+[[patches.hook]]
+func = "game_800AABB0"
+before_vram = 0x800AAC18
+text = """
+    wa_coro_resume(rdram, ctx);
+    goto L_800AAC40;
+"""
+
+# Widescreen (src/game/widescreen.cpp, STATUS.md round 7): the drawing
+# library's screen bounds widened from [0, 320] to [-272, 592]
+# (WA_WS_EXTRA = 272 in include/wa_recomp_hooks.h; keep these in step).
+# Right edges: the 0x141 / 0x140 constants, + 272 (0x251 / 0x250).
+
+[[patches.instruction]]
+func = "func_8000733C"
+vram = 0x80007408
+value = 0x2A020251
+
+[[patches.instruction]]
+func = "func_8000762C"
+vram = 0x80007794
+value = 0x29220251
+
+[[patches.instruction]]
+func = "func_8000762C"
+vram = 0x80007868
+value = 0x28420251
+
+[[patches.instruction]]
+func = "func_8000762C"
+vram = 0x800079EC
+value = 0x28820251
+
+[[patches.instruction]]
+func = "func_8000762C"
+vram = 0x800079FC
+value = 0x24020250
+
+[[patches.instruction]]
+func = "func_80007C74"
+vram = 0x80007E34
+value = 0x2A420250
+
+[[patches.instruction]]
+func = "func_80008010"
+vram = 0x8000811C
+value = 0x2A220251
+
+[[patches.instruction]]
+func = "func_80008010"
+vram = 0x80008148
+value = 0x28420251
+
+[[patches.instruction]]
+func = "func_80008010"
+vram = 0x80008154
+value = 0x24020250
+
+[[patches.instruction]]
+func = "func_800084EC"
+vram = 0x80008528
+value = 0x2A420251
+
+[[patches.instruction]]
+func = "func_80009320"
+vram = 0x80009374
+value = 0x2A220251
+
+# Left edges: "x + width < 0" tests get + WA_WS_EXTRA ($v0 = x + width) ...
+[[patches.hook]]
+func = "func_8000733C"
+before_vram = 0x80007404
+text = """
+    ctx->r2 = ADD32(ctx->r2, WA_WS_EXTRA);
+"""
+
+[[patches.hook]]
+func = "func_8000762C"
+before_vram = 0x80007774
+text = """
+    ctx->r2 = ADD32(ctx->r2, WA_WS_EXTRA);
+"""
+
+# A horizontally repeating image (water waves, parallax layers) starts its
+# first copy in (-width, 0], enough for a screen from 0: step it back past
+# the wider left edge. 0x80007500 is where both wrapping paths meet; the copy's
+# width is at sp + 0x40.
+[[patches.hook]]
+func = "func_8000733C"
+before_vram = 0x80007500
+text = """
+    while ((int32_t)ctx->r16 > -WA_WS_EXTRA) {
+        ctx->r16 = SUB32(ctx->r16, MEM_W(0X40, ctx->r29));
+    }
+"""
+
+# ... and "x < -width" tests get - WA_WS_EXTRA ($v0 = -width).
+[[patches.hook]]
+func = "func_800084EC"
+before_vram = 0x80008548
+text = """
+    ctx->r2 = ADD32(ctx->r2, -WA_WS_EXTRA);
+"""
+
+[[patches.hook]]
+func = "func_80008010"
+before_vram = 0x80008130
+text = """
+    ctx->r2 = ADD32(ctx->r2, -WA_WS_EXTRA);
+"""
+
+# The blocks that clip to the left and right edges, replaced (the original
+# code after each goto doesn't run).
+[[patches.hook]]
+func = "func_80007C74"
+before_vram = 0x80007E84
+text = """
+    wa_ws_clip_7c74(rdram, ctx);
+    goto L_80007ED8;
+"""
+
+[[patches.hook]]
+func = "func_80008010"
+before_vram = 0x80008284
+text = """
+    wa_ws_clip_8010(rdram, ctx);
+    goto L_800082DC;
+"""
+
+[[patches.hook]]
+func = "func_80009320"
+before_vram = 0x8000941C
+text = """
+    wa_ws_clip_9320(rdram, ctx);
+    goto L_80009478;
+"""
+
+# HUD anchoring (STATUS.md round 15, src/game/widescreen.cpp): the walker
+# marks each draw-list entry as HUD or not, and resets any anchoring at the
+# next entry and at the end of the walk.
+[[patches.hook]]
+func = "game_8005FC70"
+before_vram = 0x8005FD1C
+text = """
+    wa_hud_entry(rdram, ctx);
+"""
+
+[[patches.hook]]
+func = "game_8005FC70"
+before_vram = 0x80060504
+text = """
+    wa_hud_end(rdram, ctx);
+"""
+
+# Hide Level Border (STATUS.md round 16, src/game/level_border.cpp): the
+# game's palette again after the landscape (func_80009320's return; its early
+# outs come here too, and do nothing then). $s3 is the drawing library.
+[[patches.hook]]
+func = "func_80009320"
+before_vram = 0x80009588
+text = """
+    wa_level_border_end(rdram, ctx);
+"""

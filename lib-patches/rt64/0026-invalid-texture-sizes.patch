@@ -1,0 +1,52 @@
+Invalid texture sizes don't crash the texture cache (warecomp STATUS.md
+round 9).
+
+On D3D12 the texture upload thread crashed (plume::setObjectName on a null
+object, from TextureCache::uploadThreadLoop): a texture was created at a
+size D3D12 refuses, then named. queueGPUUploadTMEM now keeps a decoded
+texture's size between 1 and 8192, and the S2DEX object rectangle (0024)
+skips sprites whose image size is under one texel or has the top bit set
+(Worms Armageddon sends some, e.g. a negative width).
+
+--- a/src/gbi/rt64_gbi_s2dex.cpp
++++ b/src/gbi/rt64_gbi_s2dex.cpp
+--- a/src/gbi/rt64_gbi_s2dex.cpp
++++ b/src/gbi/rt64_gbi_s2dex.cpp
+@@ -565,6 +565,13 @@
+             RDP *rdp = state->rdp.get();
+             const uint32_t renderMode = state->rsp->objRenderMode;
+ 
++            // Nothing sensible to draw for a size under one texel or with the top bit set
++            // (1024 texels or more, past what TMEM can hold): skip it rather than asking for
++            // a texture of that size.
++            if (((sprite.imageW >> 5) == 0) || ((sprite.imageH >> 5) == 0) || (sprite.imageW & 0x8000) || (sprite.imageH & 0x8000)) {
++                return;
++            }
++
+             // Texels (imageW and imageH are u10.5).
+             const int32_t texW = std::max<int32_t>(sprite.imageW >> 5, 1);
+             const int32_t texH = std::max<int32_t>(sprite.imageH >> 5, 1);
+--- a/src/render/rt64_texture_cache.cpp
++++ b/src/render/rt64_texture_cache.cpp
+@@ -4,6 +4,7 @@
+ 
+ #define STB_IMAGE_IMPLEMENTATION
+ 
++#include <algorithm>
+ #include "ddspp/ddspp.h"
+ #include "stb/stb_image.h"
+ #include "xxHash/xxh3.h"
+@@ -1264,6 +1265,13 @@
+         TextureUpload newUpload;
+         newUpload.hash = hash;
+         newUpload.creationFrame = creationFrame;
++        // A texture is created at this size when it's decoded: a size of zero or past what a GPU
++        // allows fails to create one (on D3D12 it then crashed naming it). Keep it in range.
++        if (decodeTMEM) {
++            width = std::clamp(width, 1, 8192);
++            height = std::clamp(height, 1, 8192);
++        }
++
+         newUpload.width = width;
+         newUpload.height = height;
+         newUpload.tlut = tlut;

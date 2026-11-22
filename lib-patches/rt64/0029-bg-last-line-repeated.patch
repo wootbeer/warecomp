@@ -1,0 +1,58 @@
+A background's last line doesn't show the image past the frame when
+upscaled (warecomp STATUS.md rounds 12, 13 and 15).
+
+S2DEX bg1Cyc draws a background in slices, loading one line more than it
+draws when bilerp is on. The RDP samples each pixel at its top, so that
+extra line only ever gets a zero weight; drawn at a higher resolution, the
+lower part of each output line samples further down. Inside the frame the
+line below is the frame's own next line, but on the frame's last line it is
+the image past the frame: Worms Armageddon's level showed a sliver of the
+level below the screen (or the level's top border, where the image wraps)
+along the bottom edge of the window. The frame's last slice now draws its
+last line on its own, from a TMEM holding only that image line, twice,
+which fits even when a wide slice has no room for an extra line.
+
+(Clamping T at that line, the first version, lost the last line of small
+frames such as the game's name tags in RT64's sampling; copying the line
+into the slice's next TMEM line, the second, had no room in the slices of
+an ultrawide frame.)
+
+--- a/src/gbi/rt64_gbi_s2dex.cpp
++++ b/src/gbi/rt64_gbi_s2dex.cpp
+@@ -391,10 +391,35 @@
+                         imageSliceH = std::min(imageSliceH, imageSliceLines);
+                     }
+ 
++                    const uint32_t sliceImagePtr = imagePtr;
+                     bg1CycTMEMLoad(*rdp, scaleBg, imageAddress, imagePtr, imageRemain, imageSrcWsize, imagePtrX0, tmemSrcLines, tmemSliceWmax, imageSliceH, usesBilerp, flagSplit);
+ 
++                    // The frame's last slice draws its last line on its own, from a TMEM holding only that
++                    // image line, twice. The RDP samples each pixel at its top, so the line after the last
++                    // one shown only ever gets a zero weight, but drawn at a higher resolution the bottom of
++                    // the frame's last line samples further down and showed the image past the frame (the
++                    // next line of the image, its top where it wraps, or whatever TMEM held when the slice
++                    // has no room for it). With the line twice it samples that same line again.
+                     int16_t framePtrY1 = framePtrY0 + frameSliceH;
+-                    rdp->drawTexRect(frameX0, framePtrY0 << 2, frameX1, framePtrY1 << 2, G_TX_RENDERTILE, imageS, imageT, scaleW, scaleH, false);
++                    const bool lastLineApart = (frameRemain <= 0) && (scaleBg.imageSiz != G_IM_SIZ_32b) && (2 * int32_t(tmemSliceWmax) <= tmemSize);
++                    if (lastLineApart) {
++                        const int32_t lastLineTFull = int32_t(imageT) + (((frameSliceH - 1) * int32_t(scaleH)) >> 5);
++                        const int32_t lastLineT = lastLineTFull >> 5;
++                        if (frameSliceH > 1) {
++                            rdp->drawTexRect(frameX0, framePtrY0 << 2, frameX1, (framePtrY1 - 1) << 2, G_TX_RENDERTILE, imageS, imageT, scaleW, scaleH, false);
++                        }
++
++                        const int32_t sliceStartLine = int32_t(sliceImagePtr - imageAddress - imagePtrX0) / int32_t(imageSrcWsize);
++                        const int32_t lastImageLine = (((sliceStartLine + lastLineT) % int32_t(tmemSrcLines)) + int32_t(tmemSrcLines)) % int32_t(tmemSrcLines);
++                        const uint32_t lastLinePtr = imageAddress + uint32_t(lastImageLine) * imageSrcWsize + imagePtrX0;
++                        bg1CycTMEMSetAndLoadTile(*rdp, scaleBg, lastLinePtr, imageSrcWsize, 1, tmemSliceWmax, 0, tmemSliceWmax);
++                        bg1CycTMEMSetAndLoadTile(*rdp, scaleBg, lastLinePtr, imageSrcWsize, 1, tmemSliceWmax, int16_t(tmemSliceWmax), tmemSliceWmax);
++                        rdp->drawTexRect(frameX0, (framePtrY1 - 1) << 2, frameX1, framePtrY1 << 2, G_TX_RENDERTILE, imageS, int16_t(lastLineTFull & 0x1F), scaleW, scaleH, false);
++                    }
++                    else {
++                        rdp->drawTexRect(frameX0, framePtrY0 << 2, frameX1, framePtrY1 << 2, G_TX_RENDERTILE, imageS, imageT, scaleW, scaleH, false);
++                    }
++
+                     framePtrY0 = framePtrY1;
+                 }
+ 

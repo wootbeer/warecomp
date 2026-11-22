@@ -1,0 +1,26 @@
+Raw triangles keep their proportions in an expanded aspect ratio
+(warecomp STATUS.md round 23).
+
+RDP / raw triangles are in the colour image's pixels, but the framebuffer
+renderer mapped them across the whole wide target: in 16:9 they were
+stretched by 4/3 about the centre. S2DEX matrix sprites are drawn as raw
+triangles (0030), so Worms Armageddon's turning sprites (the air strike's
+target, shells, flying worms) looked squashed and leaned as they turned,
+and sat off their place towards the sides. They're now scaled like rects:
+by the original width over the wide width, about the centre.
+
+--- a/src/render/rt64_framebuffer_renderer.cpp
++++ b/src/render/rt64_framebuffer_renderer.cpp
+@@ -1672,6 +1672,12 @@
+                         case Projection::Type::Triangle: {
+                             instanceDrawCall.type = InstanceDrawCall::Type::RawTriangles;
+                             triangles.indexStart = call.meshDesc.rawVertexStart;
++
++                            // Raw triangles are in the colour image's pixels: in an expanded aspect ratio, keep them
++                            // in proportion and in the centred original area like rects, rather than stretched
++                            // across the wide target (S2DEX matrix sprites, which are drawn as raw triangles,
++                            // looked squashed as they turned).
++                            triangles.screenScale.x = originalWidth / wideWidth;
+                             break;
+                         }
+                         case Projection::Type::None:

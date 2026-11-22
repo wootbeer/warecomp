@@ -1,0 +1,54 @@
+A scissor that is just the whole screen doesn't cut horizontally in an
+expanded aspect ratio (warecomp STATUS.md round 8).
+
+With Expand, a scissor without extended origins is scaled about the
+centre, so the game's full-screen scissor (0-320) became the middle 4:3
+area and cut everything drawn past the screen's sides. Worms Armageddon
+draws its level past them for widescreen (name tags, sprites, water were
+cut at the old 4:3 edges). Two places:
+
+- framebuffer renderer: a draw whose scissor spans the whole colour image
+  width and has no origins gets the whole wide target horizontally;
+- S2DEX bg1Cyc, which cuts a background frame to the scissor as the
+  microcode does: not horizontally for such a scissor.
+
+Smaller scissors, and scissors with origins (gEXSetScissor), are as before.
+
+--- a/src/gbi/rt64_gbi_s2dex.cpp
++++ b/src/gbi/rt64_gbi_s2dex.cpp
+@@ -178,6 +178,15 @@
+             int32_t scissorY0 = scissorRect.uly;
+             int32_t scissorX1 = scissorRect.lrx;
+             int32_t scissorY1 = scissorRect.lry;
++
++            // A scissor spanning the whole colour image is just the screen: don't cut the
++            // frame horizontally there, so that with an expanded aspect ratio a background
++            // reaching past the screen's sides shows like every other draw does.
++            if ((scissorX0 <= 0) && (scissorX1 >= (int32_t(rdp->colorImage.width) << 2))) {
++                scissorX0 = std::min<int32_t>(scissorX0, frameX0);
++                scissorX1 = std::max<int32_t>(scissorX1, frameX0 + frameW);
++            }
++
+             int16_t pixX0 = int16_t(std::max(scissorX0 - frameX0, 0));
+             int16_t pixY0 = int16_t(std::max(scissorY0 - frameY0, 0));
+             int16_t pixX1 = int16_t(std::max(frameW - scissorX1 + frameX0, 0));
+--- a/src/render/rt64_framebuffer_renderer.cpp
++++ b/src/render/rt64_framebuffer_renderer.cpp
+@@ -1678,6 +1678,17 @@
+ 
+                         triangles.scissor = convertFixedRect(call.callDesc.scissorRect, p.resolutionScale, p.fbWidth, invRatioScale, extOriginPercentage, int32_t(horizontalMisalignment), call.callDesc.scissorLeftOrigin, call.callDesc.scissorRightOrigin);
+ 
++                        // A scissor that is just the whole screen (and isn't anchored to an origin) doesn't
++                        // limit the draw horizontally: with an expanded aspect ratio it spans the whole wide
++                        // target, so what the game draws past the screen's sides shows. Kept in the target.
++                        const FixedRect &callScissor = call.callDesc.scissorRect;
++                        if ((call.callDesc.scissorLeftOrigin == G_EX_ORIGIN_NONE) && (call.callDesc.scissorRightOrigin == G_EX_ORIGIN_NONE) &&
++                            (callScissor.ulx <= 0) && (callScissor.lrx >= int32_t(p.fbWidth) * 4))
++                        {
++                            triangles.scissor.left = 0;
++                            triangles.scissor.right = int32_t(wideWidth);
++                        }
++
+                         bool usesViewport = (proj.type == Projection::Type::Perspective) || (proj.type == Projection::Type::Orthographic);
+                         if (usesViewport) {
+                             triangles.scissor = viewportScissorIntersection(viewportClip, triangles.scissor);

@@ -1,0 +1,207 @@
+S2DEX sprites through the 2D matrix are drawn (warecomp STATUS.md rounds 19-22).
+
+G_OBJ_MOVEMEM (gSPObjMatrix, gSPObjSubMatrix) wasn't handled, and
+G_OBJ_SPRITE / G_OBJ_LDTX_SPRITE / G_OBJ_LDTX_RECT_R loaded their texture
+and drew nothing (TODOs). Worms Armageddon draws its rotating sprites that
+way (func_8000762C: a rotation matrix, then G_OBJ_LDTX_SPRITE), among them
+the air strike's target cursor, which didn't show at all.
+
+The matrix is kept; a matrix sprite's corners go through it (x' = A x +
+B y + X, y' = C x + D y + Y, the S2DEX manual's) and it is drawn as two
+textured triangles (RDP::drawTris), with texture coordinates at twice the
+texels (the sampler halves them for triangles that aren't perspective
+corrected); a RECTANGLE_R through the matrix's translation and base scale.
+
+(Earlier versions: drawn upright, round 19; turned but with texels as
+texture coordinates, so only the top-left quarter of the image showed,
+magnified: the air strike's arrow looked like a tick, round 20; and with the
+matrix transposed, from misreading that quarter, round 21. Round 22 checked
+the corners against the screen: a shell's nose leads along its path.)
+
+--- a/src/gbi/rt64_gbi_s2dex.h
++++ b/src/gbi/rt64_gbi_s2dex.h
+@@ -123,6 +123,8 @@
+ 
+         void objRenderMode(State *state, DisplayList **dl);
+         void objRectangle(State *state, DisplayList **dl);
++        void objSprite(State *state, DisplayList **dl);
++        void objMoveMem(State *state, DisplayList **dl);
+         void moveWord(State *state, DisplayList **dl);
+         void bg1Cyc(State *state, DisplayList **dl);
+         void bgCopy(State *state, DisplayList **dl);
+--- a/src/gbi/rt64_gbi_s2dex.cpp
++++ b/src/gbi/rt64_gbi_s2dex.cpp
+@@ -5,6 +5,7 @@
+ #include "rt64_gbi_s2dex.h"
+ 
+ #include <algorithm>
++#include <cmath>
+ 
+ #include "../include/rt64_extended_gbi.h"
+ 
+@@ -639,6 +640,123 @@
+             state->endSpriteCommand();
+         }
+ 
++        // The 2D matrix (gSPObjMatrix / gSPObjSubMatrix through G_OBJ_MOVEMEM).
++        struct ObjMatrix {
++            int32_t A = 0x10000, B = 0, C = 0, D = 0x10000; // s15.16
++            int16_t X = 0, Y = 0;                           // s10.2
++            uint16_t BaseScaleX = 0x400, BaseScaleY = 0x400; // u5.10
++        };
++        ObjMatrix objMatrix;
++
++        void objMoveMem(State *state, DisplayList **dl) {
++            const uint32_t length = (((*dl)->w0 >> 16) & 0xFF) + 1;
++            uint32_t rdramAddress = state->rsp->fromSegmentedMasked((*dl)->w1) & RSP_DMA_MASK;
++            const uint32_t *words = reinterpret_cast<const uint32_t *>(state->fromRDRAM(rdramAddress));
++            // Words as RDRAM holds them: a 32-bit field each, or two 16-bit fields,
++            // the first in the upper half.
++            if (length >= 24) {
++                objMatrix.A = int32_t(words[0]);
++                objMatrix.B = int32_t(words[1]);
++                objMatrix.C = int32_t(words[2]);
++                objMatrix.D = int32_t(words[3]);
++                words += 4;
++            }
++            if (length >= 8) {
++                objMatrix.X = int16_t(words[0] >> 16);
++                objMatrix.Y = int16_t(words[0] & 0xFFFF);
++                objMatrix.BaseScaleX = uint16_t(words[1] >> 16);
++                objMatrix.BaseScaleY = uint16_t(words[1] & 0xFFFF);
++            }
++        }
++
++        // A sprite through the 2D matrix (G_OBJ_SPRITE and G_OBJ_LDTX_SPRITE): its
++        // corners go through the matrix (x' = A x + B y + X, y' = C x + D y + Y, the
++        // S2DEX manual's, rotating about the screen point X, Y) and
++        // it's drawn as two textured triangles, turned and scaled as the microcode
++        // draws it (Worms Armageddon's air strike target, its rotating projectiles).
++        void doObjSprite(State *state, const uObjSprite &sprite) {
++            RDP *rdp = state->rdp.get();
++            const uint32_t renderMode = state->rsp->objRenderMode;
++            if (((sprite.imageW >> 5) == 0) || ((sprite.imageH >> 5) == 0) || (sprite.imageW & 0x8000) || (sprite.imageH & 0x8000)) {
++                return;
++            }
++
++            const int32_t texW = std::max<int32_t>(sprite.imageW >> 5, 1);
++            const int32_t texH = std::max<int32_t>(sprite.imageH >> 5, 1);
++            const uint8_t clamp = (renderMode & S2DEX_G_OBJRM_NOTXCLAMP) ? (G_TX_WRAP | G_TX_NOMIRROR) : (G_TX_CLAMP | G_TX_NOMIRROR);
++            rdp->setTile(G_TX_RENDERTILE, sprite.imageFmt, sprite.imageSiz, sprite.imageStride, sprite.imageAdrs, sprite.imagePal,
++                clamp, clamp, G_TX_NOMASK, G_TX_NOMASK, G_TX_NOLOD, G_TX_NOLOD);
++            rdp->setTileSize(G_TX_RENDERTILE, 0, 0, (texW - 1) << 2, (texH - 1) << 2);
++
++            const float a = objMatrix.A / 65536.0f, b = objMatrix.B / 65536.0f;
++            const float c = objMatrix.C / 65536.0f, d = objMatrix.D / 65536.0f;
++            const float scaleW = (sprite.scaleW != 0) ? sprite.scaleW : 0x400;
++            const float scaleH = (sprite.scaleH != 0) ? sprite.scaleH : 0x400;
++            const float x0 = sprite.objX / 4.0f;
++            const float y0 = sprite.objY / 4.0f;
++            const float x1 = x0 + (sprite.imageW / 32.0f) * 1024.0f / scaleW;
++            const float y1 = y0 + (sprite.imageH / 32.0f) * 1024.0f / scaleH;
++            const float tx = objMatrix.X / 4.0f;
++            const float ty = objMatrix.Y / 4.0f;
++
++            // Texels at the corners, flipped as asked.
++            float s0 = 0.0f, s1 = float(texW), t0 = 0.0f, t1 = float(texH);
++            if (sprite.imageFlags & S2DEX_G_OBJ_FLAG_FLIPS) {
++                std::swap(s0, s1);
++            }
++            if (sprite.imageFlags & S2DEX_G_OBJ_FLAG_FLIPT) {
++                std::swap(t0, t1);
++            }
++
++            struct Corner { float x, y, s, t; };
++            auto corner = [&](float ox, float oy, float cs, float ct) {
++                return Corner{ tx + a * ox + b * oy, ty + c * ox + d * oy, cs, ct };
++            };
++            const Corner q[4] = { corner(x0, y0, s0, t0), corner(x1, y0, s1, t0), corner(x0, y1, s0, t1), corner(x1, y1, s1, t1) };
++            const int order[6] = { 0, 1, 2, 1, 3, 2 };
++            float pos[6 * 4], tc[6 * 2], col[6 * 4];
++            for (int i = 0; i < 6; i++) {
++                const Corner &v = q[order[i]];
++                pos[i * 4 + 0] = v.x;
++                pos[i * 4 + 1] = v.y;
++                pos[i * 4 + 2] = 0.0f;
++                pos[i * 4 + 3] = 1.0f;
++                // Raw triangles that aren't perspective-corrected have their texture
++                // coordinates halved in the sampler (TextureSampler.hlsli): pass twice
++                // the texels, as the RDP triangle path does.
++                tc[i * 2 + 0] = v.s * 2.0f;
++                tc[i * 2 + 1] = v.t * 2.0f;
++                col[i * 4 + 0] = col[i * 4 + 1] = col[i * 4 + 2] = col[i * 4 + 3] = 1.0f;
++            }
++
++            state->startSpriteCommand(0);
++            rdp->drawTris(2, pos, tc, col, G_TX_RENDERTILE, 0);
++            rdp->updateCallTexcoords(0.0f, 0.0f);
++            rdp->updateCallTexcoords(float(texW), float(texH));
++            state->endSpriteCommand();
++        }
++
++        // G_OBJ_RECTANGLE_R: a rectangle placed by the matrix's translation and
++        // base scale only.
++        void doObjRectangleR(State *state, const uObjSprite &sprite) {
++            const double baseX = (objMatrix.BaseScaleX != 0) ? objMatrix.BaseScaleX : 0x400;
++            const double baseY = (objMatrix.BaseScaleY != 0) ? objMatrix.BaseScaleY : 0x400;
++            uObjSprite placed = sprite;
++            const double scaleW = (sprite.scaleW != 0) ? sprite.scaleW : 0x400;
++            const double scaleH = (sprite.scaleH != 0) ? sprite.scaleH : 0x400;
++            placed.objX = int16_t(std::lround(objMatrix.X + sprite.objX * 1024.0 / baseX));
++            placed.objY = int16_t(std::lround(objMatrix.Y + sprite.objY * 1024.0 / baseY));
++            placed.scaleW = uint16_t(std::clamp(scaleW * baseX / 1024.0, 1.0, 65535.0));
++            placed.scaleH = uint16_t(std::clamp(scaleH * baseY / 1024.0, 1.0, 65535.0));
++            doObjRectangle(state, placed);
++        }
++
++        void objSprite(State *state, DisplayList **dl) {
++            readS2DStruct(state, (*dl)->w1, sizeof(uObjSprite));
++            const uObjSprite *sprite = reinterpret_cast<const uObjSprite *>(state->rsp->S2D.struct_buffer.data());
++            doObjSprite(state, *sprite);
++        }
++
+         void objRectangle(State *state, DisplayList **dl) {
+             readS2DStruct(state, (*dl)->w1, sizeof(uObjSprite));
+             const uObjSprite *sprite = reinterpret_cast<const uObjSprite *>(state->rsp->S2D.struct_buffer.data());
+@@ -672,8 +790,7 @@
+             doLoadTxtr(state, &obj->txtr);
+             
+             // Execute the sprite draw
+-            // TODO call doObjSprite(state, &obj->sprite) when it's implemented
+-            assert(false);
++            doObjSprite(state, obj->sprite);
+         #ifdef LOG_LOADTXTR_METHODS
+             RT64_LOG_PRINTF("objLoadTxSprite::end(0x%08X)", (*dl)->w1);
+         #endif
+@@ -709,8 +826,7 @@
+             doLoadTxtr(state, &obj->txtr);
+             
+             // Execute the rect r draw
+-            // TODO call doObjRectangleR(state, &obj->sprite) when it's implemented
+-            assert(false);
++            doObjRectangleR(state, obj->sprite);
+         #ifdef LOG_LOADTXTR_METHODS
+             RT64_LOG_PRINTF("objLoadTxRectR::end(0x%08X)", (*dl)->w1);
+         #endif
+--- a/src/gbi/rt64_gbi_s2dex2.h
++++ b/src/gbi/rt64_gbi_s2dex2.h
+@@ -16,6 +16,8 @@
+ #define S2DEX2_G_OBJ_LDTX_SPRITE 0x06
+ #define S2DEX2_G_OBJ_LDTX_RECT 0x07
+ #define S2DEX2_G_OBJ_LDTX_RECT_R 0x08
++#define S2DEX2_G_OBJ_SPRITE 0x02
++#define S2DEX2_G_OBJ_MOVEMEM 0xDC
+ 
+ 
+ namespace RT64 {
+--- a/src/gbi/rt64_gbi_s2dex2.cpp
++++ b/src/gbi/rt64_gbi_s2dex2.cpp
+@@ -71,6 +71,8 @@
+             gbi->map[S2DEX2_G_OBJ_LDTX_SPRITE] = &GBI_S2DEX::objLoadTxSprite;
+             gbi->map[S2DEX2_G_OBJ_LDTX_RECT] = &GBI_S2DEX::objLoadTxRect;
+             gbi->map[S2DEX2_G_OBJ_RECTANGLE] = &GBI_S2DEX::objRectangle;
++            gbi->map[S2DEX2_G_OBJ_SPRITE] = &GBI_S2DEX::objSprite;
++            gbi->map[S2DEX2_G_OBJ_MOVEMEM] = &GBI_S2DEX::objMoveMem;
+             gbi->map[S2DEX2_G_OBJ_LDTX_RECT_R] = &GBI_S2DEX::objLoadTxRectR;
+             gbi->map[F3DEX2_G_DL] = &GBI_F3D::runDl;
+             gbi->map[F3DEX2_G_MOVEWORD] = &moveWord;
