@@ -335,12 +335,6 @@ static void queue_samples(int16_t* audio_data, size_t sample_count) {
     }
 
     std::lock_guard<std::mutex> lock(audio_mutex);
-    // Testing switch: WA_NO_AUDIO_CAP=1 queues everything (no latency cap).
-    static const bool no_audio_cap = [] { const char* v = std::getenv("WA_NO_AUDIO_CAP"); return v != nullptr && v[0] != '\0' && v[0] != '0'; }();
-    if (no_audio_cap) {
-        SDL_QueueAudio(audio_device, buffer.data(), static_cast<Uint32>(sample_count * sizeof(float)));
-        return;
-    }
     const size_t bytes_per_ms = game_frequency * audio_channels * sizeof(float) / 1000;
     const size_t queued_bytes = SDL_GetQueuedAudioSize(audio_device);
     if (queued_bytes > audio_hard_cap_ms * bytes_per_ms) {
