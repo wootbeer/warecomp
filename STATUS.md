@@ -3,6 +3,28 @@
 How each piece of the port was found and fixed, newest first. PROGRESS.md
 has the short version.
 
+## 2026-11-23, round 31: Android MENU button; slow on a Motorola (Adreno 619)
+
+**Reports after 0.1.0:** the owner's Motorola (moto g 5G 2024, SM4375, Adreno 619, Android 15):
+the touch MENU button does nothing, and the game runs very slowly. A Reddit user: "does not
+work" on a Moto G60 (Adreno 618, 4 GB), no log yet.
+
+**MENU:** the MENU button and Back send Escape (`WAActivity.openGameMenu`). RecompFrontend patch
+0018, from btgarecomp (whose game uses Escape for its pause menu), opens the settings from a
+running game with F1, F10 and F2 only, so Escape did nothing in game, on PC too (the README's
+"F1 or Esc" was wrong). Patch 0028 adds Escape back; Worms has no Escape of its own. Tested
+(Linux): in a match, Escape opens the settings and Escape again closes them.
+
+**Slow:** the owner's shared log (a debug build from before the release): no descriptor
+indexing (shaders made uniform, plume 0008), and all 8 ubershader pipelines fail with
+VK_ERROR_UNKNOWN, as snprecomp found on the same phone (its android/PLAN.md, "Crash after the
+Nintendo logo on Adreno 619"). warecomp has those fixes (rt64 and plume patches from
+snprecomp), so instead of crashing, each new kind of draw waits for its own shader: pop-in on
+a first run, less once the shaders are saved. On top of that the PC defaults were heavy for a
+phone: the screen's full resolution, MSAA 2x, and every frame of a 120 Hz screen. Patch 0029:
+on Android a new install starts at Original 2x, Framerate Original and no MSAA. Saved settings
+are kept, so existing installs change them on the Graphics tab.
+
 ## 2026-11-22, round 30: release review (0.1.0 Beta)
 
 Before the first public release: version 0.1.0 (desktop and Android), README and the first
