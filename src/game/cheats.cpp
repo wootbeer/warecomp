@@ -20,6 +20,7 @@
 
 #include "wa_cheats.h"
 #include "recomp.h"
+#include "wa_recomp_hooks.h" // wa_perf_frame
 
 namespace {
     using wa::cheats::Cheat;
