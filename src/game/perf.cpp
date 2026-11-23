@@ -2,7 +2,8 @@
 // second, the longest gap between two frames, and how many frames took over 50 ms. Players'
 // shared logs then show how fast a phone runs the game, and whether it slows down all the time
 // or in bursts (explosions, animations). Called once per game frame, after its buffer swap
-// (wa_cheats_frame, from the hook in func_80033948).
+// (wa_cheats_frame, from the hook in func_80033948). The game runs at 60 frames a second (measured
+// on desktop) and its logic advances once a frame, so below 60 it plays in slow motion.
 #include <chrono>
 #include <cstdio>
 
