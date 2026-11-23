@@ -90,7 +90,7 @@ For example, as Steam launch options:
 On Windows, run it from a command prompt to see `--list-settings` and `--help`.
 
 ## Controls
-F1 or Esc opens the settings. Change the controls on the Controls tab.
+F1 or Esc opens the settings (on Android: the MENU button or Back). Change the controls on the Controls tab.
 
 | N64 | Keyboard | Controller |
 |---|---|---|

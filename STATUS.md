@@ -3,6 +3,89 @@
 How each piece of the port was found and fixed, newest first. PROGRESS.md
 has the short version.
 
+## 2026-11-23, round 33: slow motion on a mid-range phone: Android performance hints
+
+The owner's Motorola (Adreno 619) plays at 36-55 fps instead of 60, the game in slow motion.
+Measured with logs added to the Android build (frame rate, busiest threads, RT64's own timings,
+rt64 0044), over several sessions:
+
+- Resolution and aspect ratio change nothing (36-50 fps at the lowest settings, 4:3).
+- No thread is busy: RT64's display list thread about 23% of a core, its other threads, the
+  audio microcode thread and the game's threads 5-13% each.
+- RT64 per frame: renderer CPU 5-6 ms, GPU 2 ms, 2-3 ms waiting for an earlier present, and
+  20-26 ms between presents. RT64 is idle most of each frame: it waits for the game.
+- The VI thread keeps an absolute 60 Hz schedule (ultramodern `vi_thread_func`), so the clock
+  doesn't drift.
+- warecomp already has every Android fix from snprecomp and btgarecomp (shader cache, failed
+  pipelines, descriptor fallbacks; compared patch by patch), and Sin and Punishment runs well
+  on this phone.
+
+The difference: Worms runs at 60 fps, Sin and Punishment and BattleTanx at 30. A frame is a chain
+of steps on different threads (game logic, audio microcode, display list hand-off), each idle
+most of the time, which Android's scheduler keeps on its slow cores at low clocks; the chain
+then often misses the 16.7 ms VI and the frame waits for the next one.
+
+**Change** (`src/game/perf.cpp`, Android only): the Performance Hint API (ADPF, Android 13+,
+looked up at run time; the app runs from Android 9). After the first 10 s of play a hint
+session covers the threads that used at least 2% of a core (the game's, the audio's, RT64's),
+with a 16.7 ms target; each frame reports its length, so Android gives those threads faster
+cores or clocks when frames run late. The thread set is refreshed every 10 s (setThreads on
+Android 14+, otherwise a new session). The log says whether hints are on. Untested on a phone.
+
+**On the owner's phone:** "the session couldn't be made" every time: Android 15, but no hint
+support underneath (the log now also prints the preferred update rate; -1 means none). The same
+log shows the renderer's CPU time per frame rising from 2.7 to 7.3 ms over a minute while the
+frame rate fell from 55 to 36 fps: the same work on slower cores or lower clocks.
+
+**Fallback:** where hint sessions fail, the threads that used at least 2% of a core are kept on
+the phone's fastest cores (`sched_setaffinity`; the cores with the highest top clock, from
+`/sys/devices/system/cpu/cpu*/cpufreq/cpuinfo_max_freq`; only where the cores differ). The
+SM4375 has 2 fast cores of 8, and those threads add up to about one core. The log lists the
+fast cores and how many threads were moved. Untested on a phone.
+
+## 2026-11-23, round 32: black screen on a Moto G60 (Adreno 618, Android 12)
+
+**Report** (Reddit, with a Share log): black screen and no sound at start; the user points at
+the same symptom in another N64 port's Android build. Moto G60 (SM7150, Adreno 618, driver
+0x801f6000, Android 12). The crash report: segfault at pc 0 reading 0x0 on a non-game thread,
+called from `libvulkan.so` (Android's own Vulkan library), called from libmain.so. The log stops
+right after RT64 starts its shader queue, before the first frame.
+
+**Cause** (the stack's libmain offsets, looked up in this repo's Android build, land in RT64's
+present thread and plume's swap chain; that build isn't byte-identical to the user's, so this is
+the likely cause, not proven): plume enables present wait when the driver lists
+VK_KHR_present_id and VK_KHR_present_wait, then calls `vkWaitForPresentKHR`. On Android the swap
+chain belongs to the system's Vulkan library, not the driver, and Android 12's has no
+`vkWaitForPresentKHR`: the call through the loader jumps to address 0. The owner's Adreno 619 on
+Android 15 doesn't crash there.
+
+**Fix:** plume 0013: the presentWait capability also needs `vkGetDeviceProcAddr(device,
+"vkWaitForPresentKHR")` to return the function; if it doesn't, the log says so and RT64 presents
+without waiting on presents (its path for devices without the extension). Nothing changes where
+the function exists. Untested on an affected phone: needs the Reddit user's next log.
+
+## 2026-11-23, round 31: Android MENU button; slow on a Motorola (Adreno 619)
+
+**Reports after 0.1.0:** the owner's Motorola (moto g 5G 2024, SM4375, Adreno 619, Android 15):
+the touch MENU button does nothing, and the game runs very slowly. A Reddit user: "does not
+work" on a Moto G60 (Adreno 618, 4 GB), no log yet.
+
+**MENU:** the MENU button and Back send Escape (`WAActivity.openGameMenu`). RecompFrontend patch
+0018, from btgarecomp (whose game uses Escape for its pause menu), opens the settings from a
+running game with F1, F10 and F2 only, so Escape did nothing in game, on PC too (the README's
+"F1 or Esc" was wrong). Patch 0028 adds Escape back; Worms has no Escape of its own. Tested
+(Linux): in a match, Escape opens the settings and Escape again closes them.
+
+**Slow:** the owner's shared log (a debug build from before the release): no descriptor
+indexing (shaders made uniform, plume 0008), and all 8 ubershader pipelines fail with
+VK_ERROR_UNKNOWN, as snprecomp found on the same phone (its android/PLAN.md, "Crash after the
+Nintendo logo on Adreno 619"). warecomp has those fixes (rt64 and plume patches from
+snprecomp), so instead of crashing, each new kind of draw waits for its own shader: pop-in on
+a first run, less once the shaders are saved. On top of that the PC defaults were heavy for a
+phone: the screen's full resolution, MSAA 2x, and every frame of a 120 Hz screen. Patch 0029:
+on Android a new install starts at Original 2x, Framerate Original and no MSAA. Saved settings
+are kept, so existing installs change them on the Graphics tab.
+
 ## 2026-11-22, round 30: release review (0.1.0 Beta)
 
 Before the first public release: version 0.1.0 (desktop and Android), README and the first

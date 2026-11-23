@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.1.1 Beta] - 2026-11-23
+
+### Added
+- Android: frame rate and timing lines in the log (Share log), to help with
+  slow phone reports.
+
+### Changed
+- Android: lighter graphics settings for new installs (Original 2x
+  resolution, the game's own framerate, no MSAA). Existing installs keep their
+  settings, change them on the Graphics tab.
+- Android: the game keeps its busiest threads on the phone's fast cores, or
+  uses Android's performance hints where the phone supports them. Much closer
+  to full speed on mid-range phones (tested on a Moto G 5G 2024: from 36-55 fps
+  to 51-59).
+
+### Fixed
+- Android: the on-screen MENU button and Back now open the settings in game.
+  Esc opens them on PC too.
+- Android: black screen with no sound at start on some phones with Android 12
+  (Moto G60).
+
 ## [0.1.0 Beta] - 2026-11-22
 
 ### Changed

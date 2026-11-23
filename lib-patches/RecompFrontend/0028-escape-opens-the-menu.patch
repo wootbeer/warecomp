@@ -1,0 +1,21 @@
+Escape opens the settings from the game again (warecomp).
+
+Patch 0018 (from btgarecomp, whose game uses Escape for its own pause menu) left only F1,
+F10 and F2. Worms Armageddon has no Escape of its own, and Android's MENU button and Back
+key send Escape, so they did nothing in game.
+
+--- a/recompui/src/base/ui_state.cpp
++++ b/recompui/src/base/ui_state.cpp
+@@ -873,8 +873,10 @@
+ 
+             switch (cur_event.type) {
+             case SDL_EventType::SDL_KEYDOWN:
+-                // F1 or F10 (Escape is the game's: its pause menu).
+-                if (cur_event.key.keysym.scancode == SDL_Scancode::SDL_SCANCODE_F1 ||
++                // F1, F10 or Escape (warecomp: Worms Armageddon has no Escape of its own, and
++                // Android's MENU button and Back send it).
++                if (cur_event.key.keysym.scancode == SDL_Scancode::SDL_SCANCODE_ESCAPE ||
++                    cur_event.key.keysym.scancode == SDL_Scancode::SDL_SCANCODE_F1 ||
+                     cur_event.key.keysym.scancode == SDL_Scancode::SDL_SCANCODE_F10) {
+                     open_config = true;
+                 }
