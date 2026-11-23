@@ -27,6 +27,7 @@ void recomp_run_ui_callbacks(uint8_t* rdram, recomp_context* ctx);
 // so the thread that ends the wait gets to run.
 bool wa_audio_fifo_full(void);
 void wa_cheats_frame(uint8_t* rdram);
+void wa_perf_frame(void); // src/game/perf.cpp: the frame rate in the log (Android)
 void wa_yield_via_priority_drop(uint8_t* rdram);
 
 // src/game/overlays.cpp: registers the code overlay just DMA'd to 0x80048FE0

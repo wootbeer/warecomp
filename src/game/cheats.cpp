@@ -268,6 +268,7 @@ void wa::cheats::set_value(size_t index, uint32_t value) {
 // Once a frame, after each swap (the hook in wa.us.toml's func_80033948), on
 // the menus and in game.
 extern "C" void wa_cheats_frame(uint8_t* rdram) {
+    wa_perf_frame();
     static std::vector<Applied> applied = [] {
         std::vector<Applied> ret(entries().size());
         for (size_t i = 0; i < entries().size(); i++) {
