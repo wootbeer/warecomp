@@ -1,0 +1,25 @@
+Present wait only if vkWaitForPresentKHR is really there (warecomp).
+
+A Moto G60 (Adreno 618, driver 0x801f6000, Android 12) lists VK_KHR_present_id and
+VK_KHR_present_wait, but Android's own Vulkan library, which owns the swap chain there, has no
+vkWaitForPresentKHR: RT64's present thread called it and jumped to address 0 (black screen,
+no sound, a segfault from libvulkan.so). The capability now also needs the function from
+vkGetDeviceProcAddr; without it RT64 paces presents without waiting on them.
+
+--- a/plume_vulkan.cpp
++++ b/plume_vulkan.cpp
+@@ -4343,7 +4343,13 @@
+         capabilities.scalarBlockLayout = scalarBlockLayoutSupported;
+         capabilities.bufferDeviceAddress = bufferDeviceAddressSupported;
+         capabilities.samplerMirrorClampToEdge = supportedOptionalExtensions.find(VK_KHR_SAMPLER_MIRROR_CLAMP_TO_EDGE_EXTENSION_NAME) != supportedOptionalExtensions.end();
+-        capabilities.presentWait = presentWaitSupported;
++        // The driver can list present wait while the loader has no vkWaitForPresentKHR behind it:
++        // on Android the swap chain is the system's Vulkan library's (Android 12, Adreno 618), and
++        // calling it jumped to address 0 at the first present (warecomp). Use it only if it's there.
++        capabilities.presentWait = presentWaitSupported && (vkGetDeviceProcAddr(vk, "vkWaitForPresentKHR") != nullptr);
++        if (presentWaitSupported && !capabilities.presentWait) {
++            fprintf(stderr, "Vulkan: present wait is listed but vkWaitForPresentKHR isn't available; not used.\n");
++        }
+         capabilities.displayTiming = supportedOptionalExtensions.find(VK_GOOGLE_DISPLAY_TIMING_EXTENSION_NAME) != supportedOptionalExtensions.end();
+         capabilities.maxTextureSize = physicalDeviceProperties.limits.maxImageDimension2D;
+         capabilities.preferHDR = memoryHeapSize > (512 * 1024 * 1024);

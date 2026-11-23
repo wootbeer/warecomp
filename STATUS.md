@@ -3,6 +3,27 @@
 How each piece of the port was found and fixed, newest first. PROGRESS.md
 has the short version.
 
+## 2026-11-23, round 32: black screen on a Moto G60 (Adreno 618, Android 12)
+
+**Report** (Reddit, with a Share log): black screen and no sound at start; the user points at
+the same symptom in another N64 port's Android build. Moto G60 (SM7150, Adreno 618, driver
+0x801f6000, Android 12). The crash report: segfault at pc 0 reading 0x0 on a non-game thread,
+called from `libvulkan.so` (Android's own Vulkan library), called from libmain.so. The log stops
+right after RT64 starts its shader queue, before the first frame.
+
+**Cause** (the stack's libmain offsets, looked up in this repo's Android build, land in RT64's
+present thread and plume's swap chain; that build isn't byte-identical to the user's, so this is
+the likely cause, not proven): plume enables present wait when the driver lists
+VK_KHR_present_id and VK_KHR_present_wait, then calls `vkWaitForPresentKHR`. On Android the swap
+chain belongs to the system's Vulkan library, not the driver, and Android 12's has no
+`vkWaitForPresentKHR`: the call through the loader jumps to address 0. The owner's Adreno 619 on
+Android 15 doesn't crash there.
+
+**Fix:** plume 0013: the presentWait capability also needs `vkGetDeviceProcAddr(device,
+"vkWaitForPresentKHR")` to return the function; if it doesn't, the log says so and RT64 presents
+without waiting on presents (its path for devices without the extension). Nothing changes where
+the function exists. Untested on an affected phone: needs the Reddit user's next log.
+
 ## 2026-11-23, round 31: Android MENU button; slow on a Motorola (Adreno 619)
 
 **Reports after 0.1.0:** the owner's Motorola (moto g 5G 2024, SM4375, Adreno 619, Android 15):
