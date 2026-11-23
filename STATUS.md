@@ -3,6 +3,35 @@
 How each piece of the port was found and fixed, newest first. PROGRESS.md
 has the short version.
 
+## 2026-11-23, round 33: slow motion on a mid-range phone: Android performance hints
+
+The owner's Motorola (Adreno 619) plays at 36-55 fps instead of 60, the game in slow motion.
+Measured with logs added to the Android build (frame rate, busiest threads, RT64's own timings,
+rt64 0044), over several sessions:
+
+- Resolution and aspect ratio change nothing (36-50 fps at the lowest settings, 4:3).
+- No thread is busy: RT64's display list thread about 23% of a core, its other threads, the
+  audio microcode thread and the game's threads 5-13% each.
+- RT64 per frame: renderer CPU 5-6 ms, GPU 2 ms, 2-3 ms waiting for an earlier present, and
+  20-26 ms between presents. RT64 is idle most of each frame: it waits for the game.
+- The VI thread keeps an absolute 60 Hz schedule (ultramodern `vi_thread_func`), so the clock
+  doesn't drift.
+- warecomp already has every Android fix from snprecomp and btgarecomp (shader cache, failed
+  pipelines, descriptor fallbacks; compared patch by patch), and Sin and Punishment runs well
+  on this phone.
+
+The difference: Worms runs at 60 fps, Sin and Punishment and BattleTanx at 30. A frame is a chain
+of steps on different threads (game logic, audio microcode, display list hand-off), each idle
+most of the time, which Android's scheduler keeps on its slow cores at low clocks; the chain
+then often misses the 16.7 ms VI and the frame waits for the next one.
+
+**Change** (`src/game/perf.cpp`, Android only): the Performance Hint API (ADPF, Android 13+,
+looked up at run time; the app runs from Android 9). After the first 10 s of play a hint
+session covers the threads that used at least 2% of a core (the game's, the audio's, RT64's),
+with a 16.7 ms target; each frame reports its length, so Android gives those threads faster
+cores or clocks when frames run late. The thread set is refreshed every 10 s (setThreads on
+Android 14+, otherwise a new session). The log says whether hints are on. Untested on a phone.
+
 ## 2026-11-23, round 32: black screen on a Moto G60 (Adreno 618, Android 12)
 
 **Report** (Reddit, with a Share log): black screen and no sound at start; the user points at
