@@ -29,6 +29,7 @@
 #if defined(__ANDROID__)
 #include <dirent.h>
 #include <dlfcn.h>
+#include <sched.h>
 #include <sys/types.h>
 #include <unistd.h>
 #endif
@@ -122,6 +123,7 @@ namespace {
     using ReportFn = int (*)(APerformanceHintSession*, int64_t);
     using SetThreadsFn = int (*)(APerformanceHintSession*, const pid_t*, size_t);
     using CloseFn = void (*)(APerformanceHintSession*);
+    using PreferredRateFn = int64_t (*)(APerformanceHintManager*);
 
     constexpr int64_t kTargetFrameNs = 16666667; // 60 fps
 
@@ -134,6 +136,7 @@ namespace {
         CloseFn close = nullptr;
         APerformanceHintSession* session = nullptr;
         std::vector<int32_t> tids;
+        bool failed_once = false;
 
         void look_up() {
             looked_up = true;
@@ -146,8 +149,14 @@ namespace {
             report = (ReportFn)dlsym(lib, "APerformanceHint_reportActualWorkDuration");
             set_threads = (SetThreadsFn)dlsym(lib, "APerformanceHint_setThreads");
             close = (CloseFn)dlsym(lib, "APerformanceHint_closeSession");
+            auto preferred_rate = (PreferredRateFn)dlsym(lib, "APerformanceHint_getPreferredUpdateRateNanos");
             if (get_manager != nullptr && create != nullptr && report != nullptr && close != nullptr) {
                 manager = get_manager();
+            }
+            // -1 here means the phone has no performance hint support underneath (its sessions fail).
+            if (manager != nullptr && preferred_rate != nullptr) {
+                std::printf("[WA] performance hints: preferred update rate %lld ns\n", (long long)preferred_rate(manager));
+                std::fflush(stdout);
             }
             if (manager == nullptr) {
                 std::printf("[WA] performance hints: not available on this Android version\n");
@@ -190,7 +199,12 @@ namespace {
             }
             else {
                 tids.clear();
-                std::printf("[WA] performance hints: the session couldn't be made\n");
+                // Once: the phone doesn't take hint sessions; the fast cores (below) do the job.
+                if (!failed_once) {
+                    std::printf("[WA] performance hints: the session couldn't be made (not supported by this phone)\n");
+                }
+                failed_once = true;
+                manager = nullptr;
             }
             std::fflush(stdout);
         }
@@ -203,6 +217,79 @@ namespace {
     };
 
     Hint hint;
+
+    // --- The fast cores: where performance hints aren't supported, the threads the frames depend on
+    // are kept on the phone's fastest cores (the ones with the highest top clock), so Android doesn't
+    // park them on its slow ones. Only where the cores differ; a thread already moved stays moved. ---
+    struct FastCores {
+        bool looked_up = false;
+        cpu_set_t set;
+        int count = 0;
+        std::string list;
+        std::vector<int> moved;
+
+        void look_up() {
+            looked_up = true;
+            CPU_ZERO(&set);
+            long best = 0;
+            std::vector<std::pair<int, long>> cpus;
+            for (int cpu = 0; cpu < CPU_SETSIZE && cpu < 64; cpu++) {
+                char path[96];
+                std::snprintf(path, sizeof(path), "/sys/devices/system/cpu/cpu%d/cpufreq/cpuinfo_max_freq", cpu);
+                FILE* f = std::fopen(path, "r");
+                if (f == nullptr) {
+                    continue;
+                }
+                long khz = 0;
+                if (std::fscanf(f, "%ld", &khz) == 1 && khz > 0) {
+                    cpus.emplace_back(cpu, khz);
+                    best = std::max(best, khz);
+                }
+                std::fclose(f);
+            }
+            for (const auto& [cpu, khz] : cpus) {
+                if (khz == best) {
+                    CPU_SET(cpu, &set);
+                    count++;
+                    list += (list.empty() ? "" : ",") + std::to_string(cpu);
+                }
+            }
+            if (count == 0 || count == (int)cpus.size()) {
+                count = 0; // all alike (or unknown): nothing to do
+                return;
+            }
+            std::printf("[WA] fast cores: cpu %s of %zu (%ld MHz)\n", list.c_str(), cpus.size(), best / 1000);
+            std::fflush(stdout);
+        }
+
+        void move(const std::vector<ThreadUse>& use) {
+            if (!looked_up) {
+                look_up();
+            }
+            if (count == 0) {
+                return;
+            }
+            int newly = 0;
+            for (const ThreadUse& t : use) {
+                if (t.percent < 2.0) {
+                    continue;
+                }
+                if (std::find(moved.begin(), moved.end(), t.tid) != moved.end()) {
+                    continue;
+                }
+                if (sched_setaffinity(t.tid, sizeof(set), &set) == 0) {
+                    moved.push_back(t.tid);
+                    newly++;
+                }
+            }
+            if (newly > 0) {
+                std::printf("[WA] fast cores: %d more threads kept there (%zu in all)\n", newly, moved.size());
+                std::fflush(stdout);
+            }
+        }
+    };
+
+    FastCores fast_cores;
 }
 #endif
 
@@ -245,6 +332,9 @@ extern "C" void wa_perf_frame() {
         std::printf("[WA] busiest threads: %s\n", busiest_text(use).c_str());
         std::fflush(stdout);
         hint.update_threads(use);
+        if (hint.session == nullptr) {
+            fast_cores.move(use);
+        }
         window_start = now;
         frames = slow = 0;
         longest_ms = 0.0;

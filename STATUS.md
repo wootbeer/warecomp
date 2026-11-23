@@ -32,6 +32,17 @@ with a 16.7 ms target; each frame reports its length, so Android gives those thr
 cores or clocks when frames run late. The thread set is refreshed every 10 s (setThreads on
 Android 14+, otherwise a new session). The log says whether hints are on. Untested on a phone.
 
+**On the owner's phone:** "the session couldn't be made" every time: Android 15, but no hint
+support underneath (the log now also prints the preferred update rate; -1 means none). The same
+log shows the renderer's CPU time per frame rising from 2.7 to 7.3 ms over a minute while the
+frame rate fell from 55 to 36 fps: the same work on slower cores or lower clocks.
+
+**Fallback:** where hint sessions fail, the threads that used at least 2% of a core are kept on
+the phone's fastest cores (`sched_setaffinity`; the cores with the highest top clock, from
+`/sys/devices/system/cpu/cpu*/cpufreq/cpuinfo_max_freq`; only where the cores differ). The
+SM4375 has 2 fast cores of 8, and those threads add up to about one core. The log lists the
+fast cores and how many threads were moved. Untested on a phone.
+
 ## 2026-11-23, round 32: black screen on a Moto G60 (Adreno 618, Android 12)
 
 **Report** (Reddit, with a Share log): black screen and no sound at start; the user points at
