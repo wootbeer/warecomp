@@ -1,0 +1,64 @@
+Android: RT64's per-frame timings in the log every 10 seconds (warecomp).
+
+The renderer's CPU and GPU time, matching, the whole workload, the time the workload thread
+waits for an earlier present, and the time between presents (RT64's own profilers, shown in
+its debug view), so a slow phone's shared log shows where a frame's time goes. Android only.
+
+--- a/src/hle/rt64_workload_queue.cpp
++++ b/src/hle/rt64_workload_queue.cpp
+@@ -8,6 +8,18 @@
+ 
+ #include "rt64_present_queue.h"
+ 
++#if defined(__ANDROID__)
++#include <chrono>
++#include <cstdio>
++
++// warecomp: every 10 seconds, RT64's own per-frame timings in the log (Android), so a slow
++// phone's shared log shows where a frame's time goes.
++namespace {
++    std::atomic<double> warecompPresentWaitMs{ 0.0 };
++    std::atomic<int> warecompPresentWaits{ 0 };
++}
++#endif
++
+ #define ENABLE_HIGH_RESOLUTION_RENDERER 1
+ 
+ namespace RT64 {
+@@ -861,6 +873,21 @@
+         rendererCPUProfiler.end();
+         rendererCPUProfiler.log();
+         rendererCPUProfiler.reset();
++#if defined(__ANDROID__)
++        {
++            static auto lastPrint = std::chrono::steady_clock::now();
++            const auto now = std::chrono::steady_clock::now();
++            if (now - lastPrint >= std::chrono::seconds(10)) {
++                lastPrint = now;
++                const int waits = warecompPresentWaits.exchange(0);
++                const double waitMs = warecompPresentWaitMs.exchange(0.0);
++                fprintf(stdout, "[RT64] per frame: renderer CPU %.1f ms, GPU %.1f ms, matching %.1f ms, workload %.1f ms, waiting for an earlier present %.1f ms, between presents %.1f ms\n",
++                    rendererCPUProfiler.average(), rendererGPUProfiler.average(), matchingProfiler.average(), workloadProfiler.average(),
++                    waits > 0 ? waitMs / waits : 0.0, ext.presentQueue->presentProfiler.average());
++                fflush(stdout);
++            }
++        }
++#endif
+ #   endif
+     }
+ 
+@@ -904,7 +931,14 @@
+             if (processCursor >= 0) {
+                 std::unique_lock<std::mutex> threadLock(threadMutex);
+                 Workload &workload = workloads[processCursor];
++#if defined(__ANDROID__)
++                const auto warecompWaitStart = std::chrono::steady_clock::now();
++#endif
+                 ext.presentQueue->waitForPresentId(workload.presentId);
++#if defined(__ANDROID__)
++                warecompPresentWaitMs = warecompPresentWaitMs + std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - warecompWaitStart).count();
++                warecompPresentWaits++;
++#endif
+ 
+                 if (!threadsRunning) {
+                     continue;
