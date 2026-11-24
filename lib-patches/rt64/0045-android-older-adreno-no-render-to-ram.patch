@@ -1,0 +1,33 @@
+Android: no Render to RAM on older Adreno drivers (warecomp).
+
+A Moto G60 (Adreno 618, driver 0x801f6000, Android 12) crashed in the driver (reading
+0xf0) while the renderer copied a rendered framebuffer back into the console's memory at a
+full sync (State::fullSync, NativeTarget::copyToNative). Another N64 port's Android build hit
+the same on that phone and an Adreno 630, and avoided it by turning that copy off. Worms
+Armageddon then shows its boot screens later (the publisher logo at about 12 s instead of
+2.5 s, checked on desktop) but the title, menus and matches draw the same. On Android,
+Qualcomm drivers older than 0x80212000 (an Adreno 619 on Android 15 runs it fine) start with
+Render to RAM off.
+
+--- a/src/hle/rt64_application.cpp
++++ b/src/hle/rt64_application.cpp
+@@ -231,6 +231,19 @@
+         fprintf(stdout, "Device Vendor: 0x%X\n", deviceDescription.vendor);
+         fprintf(stdout, "Driver Version: 0x%" PRIx64 "\n", deviceDescription.driverVersion);
+ 
++#   if defined(__ANDROID__)
++        // warecomp: older Qualcomm Adreno drivers (a Moto G60's Adreno 618, driver 0x801f6000,
++        // Android 12) crash inside the driver while the renderer copies a rendered framebuffer back
++        // into the console's memory at a full sync (another N64 port found the same on that phone
++        // and an Adreno 630). Without that copy (Render to RAM off) Worms Armageddon draws its
++        // boot screens later but otherwise the same. Drivers older than 0x80212000 (an Adreno 619
++        // on Android 15, which runs it fine) turn it off.
++        if ((uint32_t(deviceDescription.vendor) == 0x5143) && (deviceDescription.driverVersion < 0x80212000)) {
++            emulatorConfig.framebuffer.renderToRAM = false;
++            fprintf(stdout, "[RT64] Older Adreno driver: rendered frames aren't copied back to the console's memory.\n");
++        }
++#   endif
++
+         // Detect if the application should use hardware resolve or not.
+         bool usesHardwareResolve = (userConfig.hardwareResolve != UserConfiguration::HardwareResolve::Disabled);
+ 
