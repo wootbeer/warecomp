@@ -3,6 +3,27 @@
 How each piece of the port was found and fixed, newest first. PROGRESS.md
 has the short version.
 
+## 2026-11-24, round 35: Moto G60 again (0.1.2): the read-back, not the upload
+
+**0.1.2 on the Moto G60:** black screen, then the same crash (`vulkan.adreno.so`+0xdc700 reading
+0xf0, Gfx Thread), now before the launcher's game start. The log shows round 34's skip active.
+The stack, looked up in a 0.1.2 release build made here: `State::fullSync` again, ending in
+`NativeTarget::copyToNative`, the copy of a rendered framebuffer back into the console's
+memory (round 34 read the frames as the upload next to it; the user's build is laid out a few
+functions apart). Skipping the uploads only let the game reach the read-back sooner.
+
+**Confirmed elsewhere:** the owner found another N64 port's Android build (Goemon 64) with the
+same crash on the same phone, reproduced by its author on an Adreno 630: a Qualcomm driver bug
+in the call that copies the rendered image back into console memory. Its fixes: an option that
+turns that copy off, or a replacement Vulkan driver.
+
+**Fix:** round 34's patch is removed. rt64 0045 now starts with Render to RAM off
+(`emulatorConfig.framebuffer.renderToRAM`, RT64's switch for the full sync's copy back to RDRAM)
+on Android with Qualcomm drivers older than 0x80212000; the log says so. Checked on desktop with
+it off: the publisher logo shows at about 12 s instead of 2.5 s (the first boot frames depend on
+it and stay black), and the title screen, menus and a match (firing included) draw the same.
+Untested on the affected phone.
+
 ## 2026-11-24, round 34: Moto G60 crashes as the game starts (0.1.1)
 
 **Report** (Reddit, 0.1.1 Share log): the black screen is gone (round 32: the launcher draws,

@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.3 Beta] - 2026-11-24
+
+### Fixed
+- Android: the crash on phones with older Adreno drivers (Moto G60, Android 12),
+  properly this time. 0.1.2 avoided the wrong copy and crashed earlier. On those
+  phones the boot screens now take a few seconds longer to appear.
+
 ## [0.1.2 Beta] - 2026-11-24
 
 ### Fixed
