@@ -61,9 +61,21 @@ if ($null -ne $type -and $type -ne "Release") {
     Remove-Item $BuildDir -Recurse -Force
 }
 
-cmake -S . -B $BuildDir -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL "-DCMAKE_C_COMPILER=$ClangCl" "-DCMAKE_CXX_COMPILER=$ClangCl"
-if ($LASTEXITCODE -ne 0) { throw "CMake configure failed." }
+function Configure-Release {
+    cmake -S . -B $BuildDir -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL "-DCMAKE_C_COMPILER=$ClangCl" "-DCMAKE_CXX_COMPILER=$ClangCl"
+    if ($LASTEXITCODE -ne 0) { throw "CMake configure failed." }
+}
+Configure-Release
 $type = Get-BuildType $BuildDir
+# When the compiler isn't the one the folder was set up with (another Visual Studio install
+# found first, a path written differently, an update), CMake clears the folder's settings and
+# drops Release with them: start the folder over once (from btgarecomp).
+if ($type -ne "Release") {
+    Write-Host "$BuildDir came out as '$type'; starting it over as Release."
+    Remove-Item $BuildDir -Recurse -Force
+    Configure-Release
+    $type = Get-BuildType $BuildDir
+}
 if ($type -ne "Release") { throw "$BuildDir configured as '$type', not Release." }
 cmake --build $BuildDir --target WormsArmageddonRecompiled
 if ($LASTEXITCODE -ne 0) { throw "Build failed." }

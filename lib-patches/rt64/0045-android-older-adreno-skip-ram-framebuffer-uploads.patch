@@ -1,0 +1,73 @@
+Android: skip copying CPU-written framebuffers to the GPU on older Adreno drivers (warecomp).
+
+A Moto G60 (Adreno 618, driver 0x801f6000, Android 12) crashed in the driver (reading 0xf0)
+in the barrier before the compute copy of a framebuffer the game wrote with the CPU
+(NativeTarget::copyFromRAM, from State::fullSync). Worms Armageddon does that only while
+booting (six full 320x240 colour frames); with the copies skipped on desktop, the publisher
+logo, the title and a match look the same. On Android, Qualcomm drivers older than
+0x80212000 (an Adreno 619 on Android 15, which runs the copies fine) skip them.
+
+--- a/src/render/rt64_native_target.h
++++ b/src/render/rt64_native_target.h
+@@ -13,6 +13,10 @@
+ #include "rt64_shader_library.h"
+ 
+ namespace RT64 {
++    // warecomp: skip copying framebuffers the game wrote with the CPU onto the GPU (copyFromRAM).
++    // Set on drivers that crash doing it (rt64_application.cpp).
++    extern bool NativeTargetSkipRAMUploads;
++
+     struct RenderWorker;
+     struct RenderTarget;
+ 
+--- a/src/render/rt64_native_target.cpp
++++ b/src/render/rt64_native_target.cpp
+@@ -13,6 +13,8 @@
+ #include "rt64_render_worker.h"
+ 
+ namespace RT64 {
++    bool NativeTargetSkipRAMUploads = false;
++
+     // NativeTarget
+ 
+     NativeTarget::NativeTarget() { }
+@@ -61,6 +63,10 @@
+     }
+ 
+     uint32_t NativeTarget::copyFromRAM(RenderWorker *worker, FramebufferChange &emptyFbChange, uint32_t width, uint32_t height, uint32_t rowStart, uint8_t siz, uint8_t fmt, const uint8_t *data, bool invalidateTargets, const ShaderLibrary *shaderLibrary) {
++        if (NativeTargetSkipRAMUploads) {
++            return 0;
++        }
++
+         assert(worker != nullptr);
+ 
+         // Create the buffers for change count readback if they've not been created yet.
+--- a/src/hle/rt64_application.cpp
++++ b/src/hle/rt64_application.cpp
+@@ -5,6 +5,7 @@
+ #include "rt64_application.h"
+ #include "rhi/rt64_render_hooks.h"
+ #include "render/rt64_device_summary.h"
++#include "render/rt64_native_target.h"
+ 
+ #include <atomic>
+ #include <cinttypes>
+@@ -231,6 +232,18 @@
+         fprintf(stdout, "Device Vendor: 0x%X\n", deviceDescription.vendor);
+         fprintf(stdout, "Driver Version: 0x%" PRIx64 "\n", deviceDescription.driverVersion);
+ 
++#   if defined(__ANDROID__)
++        // warecomp: older Qualcomm Adreno drivers (a Moto G60's Adreno 618, driver 0x801f6000,
++        // Android 12) crash in the barrier before the compute copy of a framebuffer the game wrote
++        // with the CPU. Worms Armageddon only does that while booting (the frames are drawn over
++        // anyway), so on drivers older than 0x80212000 (an Adreno 619 on Android 15, which is fine)
++        // those copies are skipped.
++        if ((uint32_t(deviceDescription.vendor) == 0x5143) && (deviceDescription.driverVersion < 0x80212000)) {
++            NativeTargetSkipRAMUploads = true;
++            fprintf(stdout, "[RT64] Older Adreno driver: framebuffers the game writes with the CPU aren't copied to the GPU.\n");
++        }
++#   endif
++
+         // Detect if the application should use hardware resolve or not.
+         bool usesHardwareResolve = (userConfig.hardwareResolve != UserConfiguration::HardwareResolve::Disabled);
+ 
