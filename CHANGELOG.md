@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.1.2 Beta] - 2026-11-24
+
+### Fixed
+- Android: crash a few seconds after starting on phones with older Adreno
+  drivers (Moto G60, Android 12).
+
 ## [0.1.1 Beta] - 2026-11-23
 
 ### Added
