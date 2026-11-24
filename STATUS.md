@@ -3,6 +3,28 @@
 How each piece of the port was found and fixed, newest first. PROGRESS.md
 has the short version.
 
+## 2026-11-24, round 36: Xbox Series X controller on Android (wired): wrong axes
+
+**Report** (the Moto G60 user, 0.1.3, now running): remapping an action to a trigger catches a
+stick instead, the sensitivity is off, and the camera moves up or down on its own or stops
+following the worm. Wired Xbox Series X controller, GUID `050056d15e040000120b0000ff7f3f00`
+(Microsoft 045e, product 0b12). SDL renamed it "Xbox Series Controller", the name of the
+community list's Android entries for it.
+
+**Cause (likely):** `assets/gamecontrollerdb.txt` has two Android entries for that controller
+that disagree: one (`...00783f00`) puts the left trigger on a2 and the right stick on a3/a4, the
+other (`...00783f80`) the left trigger on a4 and the right stick on a2/a3. SDL's own Android
+mapping for it, and the one it builds from Android's standard gamepad axes, are the second
+layout. The user's GUID ends in `3f00`, like the first. With it, the right stick's X axis is a
+trigger and a trigger is the right stick's Y axis: the remap scanner catches the wrong input,
+and the camera, on the right stick (the C buttons), drifts.
+
+**Change** (`src/main/main.cpp`, Android): the community list is read (through SDL, as assets/
+is inside the APK) without its Android entries for Microsoft's vendor id, written to the app's
+storage and given to SDL from there, so Xbox pads get SDL's own mapping. Other controllers keep
+the list. The log now also prints each controller's mapping, so the next report shows which
+axes are which. Untested on the user's phone.
+
 ## 2026-11-24, round 35: Moto G60 again (0.1.2): the read-back, not the upload
 
 **0.1.2 on the Moto G60:** black screen, then the same crash (`vulkan.adreno.so`+0xdc700 reading

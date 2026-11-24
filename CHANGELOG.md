@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.4 Beta] - 2026-11-24
+
+### Fixed
+- Android: Xbox controllers (like the Xbox Series X controller) could get a
+  wrong button layout: a trigger on the right stick, so remapping caught the
+  wrong input and the camera drifted on its own. They now use Android's own
+  layout.
+
 ## [0.1.3 Beta] - 2026-11-24
 
 ### Fixed

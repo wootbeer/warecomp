@@ -20,6 +20,8 @@
 #include <mutex>
 #include <vector>
 #include <filesystem>
+#include <fstream>
+#include <sstream>
 #include <exception>
 #include <string>
 
@@ -85,7 +87,7 @@ namespace wa {
 
 static const std::string program_name = "Worms Armageddon Recompiled";
 static const std::u8string program_id = u8"warecomp";
-static const std::string version_string = "0.1.3";
+static const std::string version_string = "0.1.4";
 
 template <typename... Ts>
 [[noreturn]] static void exit_error(const char* fmt, Ts... args) {
@@ -149,6 +151,47 @@ static ultramodern::gfx_callbacks_t::gfx_data_t create_gfx() {
             controller_db = beside;
         }
     }
+#if defined(__ANDROID__)
+    // Android: without the list's Xbox entries (Microsoft's vendor id). Its Android entries for
+    // the Xbox Series controller disagree about which axes are the triggers and the right stick,
+    // and a wired one on a Moto G60 got one with a trigger on a right-stick axis: remapping
+    // caught the wrong input and the camera (right stick) drifted. SDL's own mapping, or the
+    // one it builds from Android's standard gamepad axes, is right for Xbox pads.
+    {
+        // Read with SDL: on Android assets/ is inside the APK, which std::ifstream can't open.
+        std::string text;
+        if (SDL_RWops* rw = SDL_RWFromFile(controller_db.c_str(), "rb")) {
+            const Sint64 size = SDL_RWsize(rw);
+            if (size > 0) {
+                text.resize((size_t)size);
+                text.resize(SDL_RWread(rw, text.data(), 1, (size_t)size));
+            }
+            SDL_RWclose(rw);
+        }
+        std::istringstream in(text);
+        // Written to the app's storage (the working folder), by its full path: SDL looks for a
+        // relative one inside the APK.
+        std::error_code cwd_ec;
+        const std::string filtered = (std::filesystem::current_path(cwd_ec) / "gamecontrollerdb-android.txt").string();
+        std::ofstream out(filtered, std::ios::trunc);
+        if (!text.empty() && out) {
+            std::string line;
+            int dropped = 0;
+            while (std::getline(in, line)) {
+                const bool android = line.find("platform:Android") != std::string::npos;
+                const bool microsoft = line.size() > 12 && line.compare(8, 4, "5e04") == 0;
+                if (android && microsoft) {
+                    dropped++;
+                    continue;
+                }
+                out << line << '\n';
+            }
+            out.close();
+            controller_db = filtered;
+            fprintf(stderr, "[WA] controller list: %d Android Xbox entries left to SDL\n", dropped);
+        }
+    }
+#endif
     SDL_SetHint(SDL_HINT_GAMECONTROLLERCONFIG_FILE, controller_db.c_str());
 
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMECONTROLLER | SDL_INIT_JOYSTICK | SDL_INIT_HAPTIC) != 0) {
@@ -163,6 +206,11 @@ static ultramodern::gfx_callbacks_t::gfx_data_t create_gfx() {
         const char* name = SDL_JoystickNameForIndex(i);
         fprintf(stderr, "[WA] joystick %d: %s (%s)%s\n", i, name != nullptr ? name : "?", guid,
             SDL_IsGameController(i) ? "" : " - not a known game controller, not used");
+        // The mapping SDL uses for it: which axis and button is which.
+        if (char* mapping = SDL_GameControllerMappingForDeviceIndex(i)) {
+            fprintf(stderr, "[WA]   mapping: %s\n", mapping);
+            SDL_free(mapping);
+        }
     }
 
     return {};
