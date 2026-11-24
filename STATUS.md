@@ -3,6 +3,36 @@
 How each piece of the port was found and fixed, newest first. PROGRESS.md
 has the short version.
 
+## 2026-11-24, round 34: Moto G60 crashes as the game starts (0.1.1)
+
+**Report** (Reddit, 0.1.1 Share log): the black screen is gone (round 32: the launcher draws,
+the game starts), but the game crashes a few seconds later, the same way every time: segfault
+in `vulkan.adreno.so` reading 0xf0, on RT64's Gfx Thread. Adreno 618, driver 0x801f6000,
+Android 12. Also slow to start (see below).
+
+**Where** (the crash's libmain offsets looked up in a release build made here from the same
+commit; the frames are a few functions off from the user's own build, so they were checked
+against each other): the Gfx Thread processing an RDP list (`texrectFlipLLE`) runs
+`State::fullSync`, which reads a framebuffer the game wrote with the CPU
+(`Framebuffer::readChangeFromStorage` / `readChangeFromBytes` / `copyRAMToNativeAndChanges`)
+and copies it to the GPU with a compute shader (`NativeTarget::copyFromRAM`); the driver
+crashes in the barrier before that copy. plume's barrier code is ordinary, and the owner's
+Adreno 619 (driver 0x80212000, Android 15) runs the same code: an older driver's bug.
+
+**How often:** logged on desktop, the game does that six times, all while booting: full
+320x240 colour frames (`siz` 2), no depth, and never in the title screen or a match after.
+With the copies skipped on desktop, the publisher logo, the title screen and a match look the
+same (screenshots compared).
+
+**Fix:** rt64 0045: on Android, Qualcomm drivers (vendor 0x5143) older than 0x80212000 skip
+those copies (`NativeTarget::copyFromRAM` returns no change); the log says so. Everything else
+is unchanged. Untested on the affected phone.
+
+**Slow start on that phone:** the run before shows about a minute of RT64 frames before the game
+started (some of it the launcher). RT64 compiles its shader library at every start and Android
+drivers don't reliably keep compiled pipelines; a saved pipeline cache would help every phone.
+Not done yet.
+
 ## 2026-11-23, round 33: slow motion on a mid-range phone: Android performance hints
 
 The owner's Motorola (Adreno 619) plays at 36-55 fps instead of 60, the game in slow motion.
